@@ -1,20 +1,20 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 const { Schema } = mongoose;
 
-// Definición del esquema de historial médico
 const historialMedicoSchema = new Schema({
     paciente: {
         type: Schema.Types.ObjectId,
-        ref: 'User',
+        ref: "User",
         required: true,
-        unique: true // Asegura que cada paciente tenga un solo historial médico
+        unique: true, // Un solo historial médico por paciente
     },
-    consultas: [{
-        type: Schema.Types.ObjectId,
-        ref: 'Consulta'
-    }]
+    consultas: [
+        {
+            type: Schema.Types.ObjectId,
+            ref: "Consulta",
+        },
+    ],
 });
 
-// Creación del modelo de historial médico
-export const HistorialMedico = mongoose.model('HistorialMedico', historialMedicoSchema);
+export const HistorialMedico = mongoose.model("HistorialMedico", historialMedicoSchema);

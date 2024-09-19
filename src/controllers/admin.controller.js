@@ -6,13 +6,13 @@ import { validateEmail } from '../helpers/validator.helper.js';
 import mongoose from 'mongoose';
 
 export const registerAdmin = async (req, res) => {
-    const { name, email, password, ci, sexo, fechaNacimiento, telefono, lastname, roles } = req.body;
+    const { name, email, password, ci, genero, fechaNacimiento, telefono, lastname, roles } = req.body;
     // Validar el formato del email usando validateEmail
     if (!validateEmail(email)) {
         return res.status(400).json({ response: 'error', message: 'El formato del email no es válido' });
     }
     // Validar otros campos obligatorios y lógica de negocio
-    if (!name || !email || !password || !ci || !sexo || !fechaNacimiento || !lastname || !telefono) {
+    if (!name || !email || !password || !ci || !genero || !fechaNacimiento || !lastname || !telefono) {
         return res.status(400).json({ response: 'error', message: 'Todos los campos son obligatorios' });
     }
 
@@ -46,7 +46,7 @@ export const registerAdmin = async (req, res) => {
             password,
             roles: roleDocuments.map(role => role._id),
             ci,
-            sexo,
+            genero,
             fechaNacimiento,
             edad,
             telefono,
@@ -65,7 +65,7 @@ export const registerAdmin = async (req, res) => {
                 edad,
                 password,
                 ci,
-                sexo,
+                genero,
                 fechaNacimiento,
                 email,
             },
@@ -129,9 +129,9 @@ export const getAdmin = async (req, res) => {
 
 export const updateAdmin = async (req, res) => {
     const { id } = req.params;
-    const { name, email, password, lastname, ci, sexo, fechaNacimiento, telefono } = req.body;
+    const { name, email, password, lastname, ci, genero, fechaNacimiento, telefono } = req.body;
     try {
-        const admin = await User.findByIdAndUpdate(id, { name, email, password, lastname, ci, sexo, fechaNacimiento, telefono }, { new: true })
+        const admin = await User.findByIdAndUpdate(id, { name, email, password, lastname, ci, genero, fechaNacimiento, telefono }, { new: true })
             .select('-password')
             .populate({
                 path: 'roles',

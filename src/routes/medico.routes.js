@@ -1,27 +1,28 @@
 import express from "express";
 import {
   registerMedico,
-  getMedico,
   getMedicos,
+  getMedicoById,
   updateMedico,
   deleteMedico,
-  getMedicosByEspecialidad,
-  getEspecialidadesByMedico
+  getCalendarioMedicoPorEspecialidad,
+  buscarMedicosPorEspecialidadId
+
+
 } from "../controllers/medico.controller.js";
 import { checkAuth } from "../middlewares/auth.middlleware.js";
 
 const router = express.Router();
 
 router.post("/register", registerMedico);
-router.get("/:id", getMedico);
 router.get("/", getMedicos);
+router.get("/:id", getMedicoById);
 router.put("/:id", updateMedico);
 router.delete("/:id", deleteMedico);
+router.get("/calendario/:medicoId/:especialidadId", getCalendarioMedicoPorEspecialidad);
 
-// Ruta para obtener médicos por especialidad
-router.get("/especialidad/:especialidadId", getMedicosByEspecialidad);
 
-// Ruta para obtener especialidades por médico
-router.get("/medicos/:medicoId/especialidades", getEspecialidadesByMedico);
+router.get("/especialidad/:especialidadId", buscarMedicosPorEspecialidadId);
+
 
 export default router;

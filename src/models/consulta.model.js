@@ -6,56 +6,55 @@ const consultaSchema = new Schema({
   citaMedica: {
     type: Schema.Types.ObjectId,
     ref: "ReservaCita",
-    required: true
+    required: true,
   },
   motivo_consulta: {
     type: String,
-    required: true
+    required: true,
   },
   signos_vitales: [
     {
       Fc: {
         type: String,
-        required: true
+        required: true,
       },
       Fr: {
         type: String,
-        required: true
+        required: true,
       },
       Temperatura: {
         type: String,
-        required: true
+        required: true,
       },
       peso: {
         type: String,
-        required: true
+        required: true,
       },
       talla: {
         type: String,
-        required: true
-      }
-    }
+        required: true,
+      },
+    },
   ],
-
   examen_fisico: {
-    type: String
+    type: String,
   },
   diagnostico: {
     type: String,
-    required: true
+    required: true,
   },
   conducta: {
     type: String,
-    required: true
+    required: true,
   },
   fechaHora: {
     type: Date,
     default: Date.now,
-    required: true
+    required: true,
   },
   receta: {
-    type: String
-  }
+    type: String,
+  },
 });
 
 export const Consulta = mongoose.model("Consulta", consultaSchema);

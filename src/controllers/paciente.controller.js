@@ -16,7 +16,7 @@ export const createUser = async (req, res) => {
     password,
     roles,
     ci,
-    sexo,
+    genero,
     fechaNacimiento,
     telefono,
     telefono_tutor,
@@ -88,7 +88,7 @@ export const createUser = async (req, res) => {
       password,
       roles: roleDocuments.map((role) => role._id),
       ci,
-      sexo,
+      genero,
       fechaNacimiento,
       edad,
       telefono,
@@ -118,7 +118,7 @@ export const createUser = async (req, res) => {
         edad,
         password,
         ci,
-        sexo,
+        genero,
         fechaNacimiento,
         email,
         nombre_tutor,
@@ -246,7 +246,7 @@ export const updatePaciente = async (req, res) => {
     email,
     password,
     ci,
-    sexo,
+    genero,
     fechaNacimiento,
     telefono,
     telefono_tutor,
@@ -329,7 +329,7 @@ export const updatePaciente = async (req, res) => {
     user.email = email || user.email;
     if (password) user.password = password;
     user.ci = ci || user.ci;
-    user.sexo = sexo || user.sexo;
+    user.genero = genero || user.genero;
     user.telefono = telefono || user.telefono;
     user.telefono_tutor = telefono_tutor || user.telefono_tutor;
     user.nombre_tutor = nombre_tutor || user.nombre_tutor;

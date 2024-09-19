@@ -1,26 +1,20 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 const reservaCitaSchema = new mongoose.Schema(
   {
     paciente: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "User",
       required: true,
     },
     medico: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "User",
       required: true,
-      validate: {
-        validator: function (value) {
-          return mongoose.model('User').findById(value).then(user => user && user.especialidades.length > 0);
-        },
-        message: 'El médico debe tener al menos una especialidad',
-      }
     },
     especialidad_solicitada: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Especialidades',
+      ref: "Especialidades",
       required: true,
     },
     fechaReserva: {
@@ -39,16 +33,25 @@ const reservaCitaSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
-    estado: {
+    estado_reserva: {
       type: String,
       enum: ["atendido", "pendiente", "cancelado"],
       default: "pendiente",
     },
-    estado_horario: { type: String, enum: ['LIBRE', 'OCUPADO'], default: 'LIBRE' }, // Nuevo campo
+    estadoConfirmacionPaciente: {
+      type: String,
+      enum: ["confirmado", "pendiente", "cancelado"],
+      default: "pendiente",
+    },
+    estadoConfirmacionMedico: {
+      type: String,
+      enum: ["confirmado", "pendiente", "cancelado"],
+      default: "pendiente",
+    },
   },
   {
     timestamps: true,
   }
 );
 
-export const ReservaCita = mongoose.model('ReservaCita', reservaCitaSchema);
+export const ReservaCita = mongoose.model("ReservaCita", reservaCitaSchema);

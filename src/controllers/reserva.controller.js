@@ -1,3 +1,4 @@
+/*
 import { ReservaCita } from "../models/reserva.model.js";
 import { User } from "../models/user.model.js";
 import { Especialidades } from "../models/especialidad.model.js";
@@ -184,296 +185,225 @@ export const createReservaCita = async (req, res) => {
     });
   }
 };
+*/
 
+//registrar reserva
 
-// Obtener todas las reservas de citas
-export const getReservasCitas = async (req, res) => {
-  try {
-    const reservas = await ReservaCita.find()
-      .select("-__v -createdAt -updatedAt")
-      .populate([
-        {
-          path: "paciente",
-          select: "-password -especialidades -__v -createdAt -updatedAt",
-          populate: { path: "roles", select: "name -_id" }
-        },
-        {
-          path: "medico",
-          select: "-password -__v -createdAt -updatedAt",
-          populate: { path: "roles especialidades", select: "name -_id" }
-        },
-        { path: "especialidad_solicitada", select: "name -_id" }
-      ]);
-    res.status(200).json(reservas);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      response: "error",
-      message: "Error del servidor al obtener las reservas de citas"
-    });
-  }
+import { User } from '../models/user.model.js';
+import { Especialidades } from '../models/especialidad.model.js';
+import { ReservaCita } from '../models/reserva.model.js';
+import { Disponibilidad } from '../models/disponibilidad.model.js';
+import mongoose from 'mongoose';
+
+// Función para sumar minutos a una hora
+const sumarMinutos = (hora, minutos) => {
+  const [horaInt, minutosInt] = hora.split(':').map(Number);
+  const nuevaHora = new Date();
+  nuevaHora.setHours(horaInt);
+  nuevaHora.setMinutes(minutosInt + minutos);
+  const horaFin = nuevaHora.toTimeString().split(':').slice(0, 2).join(':');
+  return horaFin;
 };
 
-// Obtener una reserva de cita
-export const getReservaCita = async (req, res) => {
-  const { id } = req.params;
-  try {
-    const reserva = await ReservaCita.findById(id)
-      .select("-__v -createdAt -updatedAt")
-      .populate([
-        {
-          path: "paciente",
-          select: "-password -especialidades -__v -createdAt -updatedAt",
-          populate: { path: "roles", select: "name -_id" }
-        },
-        {
-          path: "medico",
-          select: "-password -__v -createdAt -updatedAt",
-          populate: { path: "roles especialidades", select: "name -_id" }
-        },
-        { path: "especialidad_solicitada", select: "name -_id" }
-      ]);
-    res.status(200).json(reserva);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      response: "error",
-      message: "Error del servidor al obtener la reserva de cita"
-    });
-  }
+// Función para verificar si la hora de inicio respeta los intervalos permitidos (20 o 30 minutos)
+const esHoraValida = (horaInicio, duracion) => {
+  const [_, minutosInicio] = horaInicio.split(':').map(Number);
+  return minutosInicio % duracion === 0; // Verifica si los minutos son múltiplos de la duración
 };
 
-// Actualizar una reserva de cita
-export const updateReservaCita = async (req, res) => {
-  const { id } = req.params;
-  const { estado } = req.body;
+// Función para verificar si la hora de inicio permite que el fin esté dentro del rango disponible
+const verificarHoraFinDentroRango = (horaInicio, duracion, horaFinDisponibilidad) => {
+  const horaFinCalculada = sumarMinutos(horaInicio, duracion);
+  return horaFinCalculada <= horaFinDisponibilidad; // Retorna true si la hora de fin calculada está dentro del rango permitido
+};
+
+// Controlador para crear una reserva
+export const registrarReserva = async (req, res) => {
+  const {
+    pacienteId,
+    medicoId,
+    especialidadId,
+    fechaReserva,
+    horaInicio,
+  } = req.body;
+
+  // Validar que los IDs proporcionados sean ObjectIds válidos
+  if (!mongoose.Types.ObjectId.isValid(pacienteId) || !mongoose.Types.ObjectId.isValid(medicoId) || !mongoose.Types.ObjectId.isValid(especialidadId)) {
+    return res.status(400).json({ response: "error", message: "ID de paciente, médico o especialidad inválido." });
+  }
 
   try {
-    const reserva = await ReservaCita.findById(id);
+    // Verificar si el paciente existe
+    const paciente = await User.findById(pacienteId);
+    if (!paciente) {
+      return res.status(404).json({ response: "error", message: "Paciente no encontrado." });
+    }
 
-    if (!reserva) {
-      return res.status(404).json({
+    // Verificar si el médico existe y obtener sus especialidades y disponibilidad
+    const medico = await User.findById(medicoId).populate('especialidades');
+    if (!medico) {
+      return res.status(404).json({ response: "error", message: "Médico no encontrado." });
+    }
+
+    // Verificar si el médico tiene la especialidad solicitada
+    const tieneEspecialidad = medico.especialidades.some(especialidad => especialidad.equals(especialidadId));
+    if (!tieneEspecialidad) {
+      return res.status(400).json({ response: "error", message: "El médico no tiene la especialidad solicitada." });
+    }
+
+    // Obtener la disponibilidad del médico para la especialidad
+    const disponibilidad = await Disponibilidad.findOne({ medico: medicoId, especialidad: especialidadId });
+    if (!disponibilidad) {
+      return res.status(400).json({ response: "error", message: "El médico no tiene disponibilidad para esta especialidad." });
+    }
+
+    // Verificar si la hora de inicio está dentro de la disponibilidad del médico
+    if (horaInicio < disponibilidad.inicio || horaInicio >= disponibilidad.fin) {
+      return res.status(400).json({
         response: "error",
-        message: "Reserva no encontrada"
+        message: `El médico solo está disponible entre ${disponibilidad.inicio} y ${disponibilidad.fin}.`
       });
     }
 
-    const ahora = new Date();
-    const fechaReserva = new Date(reserva.fechaReserva);
-
-    // Crear objetos Date para la hora de inicio y fin
-    const [horaInicioHoras, horaInicioMinutos] = reserva.horaInicio
-      .split(":")
-      .map(Number);
-    const [horaFinHoras, horaFinMinutos] = reserva.horaFin
-      .split(":")
-      .map(Number);
-
-    const fechaHoraInicio = new Date(fechaReserva);
-    fechaHoraInicio.setUTCHours(horaInicioHoras, horaInicioMinutos, 0, 0);
-
-    const fechaHoraFin = new Date(fechaReserva);
-    fechaHoraFin.setUTCHours(horaFinHoras, horaFinMinutos, 0, 0);
-    console.log(estado);
-    console.log(ahora);
-    console.log(fechaHoraInicio);
-    console.log(fechaHoraFin);
-    // Verificar si se intenta cancelar la reserva dentro de las 24 horas previas
-    if (estado === "cancelado") {
-      const diferenciaHoras = (fechaHoraInicio - ahora) / 36e5; // Diferencia en horas
-      if (diferenciaHoras < 24) {
-        return res.status(400).json({
-          response: "error",
-          message:
-            "No se puede cancelar la reserva con menos de 24 horas de antelación"
-        });
-      }
-    }
-
-    // Verificar si se intenta marcar la reserva como atendida en la misma fecha y después de la hora de la reserva
-    if (estado === "atendido") {
-      if (ahora < fechaHoraInicio) {
-        return res.status(400).json({
-          response: "error",
-          message:
-            "La reserva solo puede marcarse como atendida en la misma fecha y después de la hora de la reserva"
-        });
-      }
-    }
-
-    reserva.estado = estado;
-    await reserva.save();
-
-    res
-      .status(200)
-      .json({ reserva, response: "success", message: "Reserva actualizada" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      response: "error",
-      message: "Error del servidor al actualizar la reserva de cita"
-    });
-  }
-};
-
-// Eliminar una reserva de cita
-export const deleteReservaCita = async (req, res) => {
-  const { id } = req.params;
-  try {
-    const reserva = await ReservaCita.findByIdAndDelete(id)
-      .select("-__v -createdAt -updatedAt")
-      .populate([
-        {
-          path: "paciente",
-          select: "-password -especialidades -__v -createdAt -updatedAt",
-          populate: { path: "roles", select: "name -_id" }
-        },
-        {
-          path: "medico",
-          select: "-password -__v -createdAt -updatedAt",
-          populate: { path: "roles especialidades", select: "name -_id" }
-        },
-        { path: "especialidad_solicitada", select: "name -_id" }
-      ]);
-    res.status(200).json({
-      response: "success",
-      message: "Reserva de cita eliminada correctamente",
-      reserva
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      response: "error",
-      message: "Error del servidor al eliminar la reserva de cita"
-    });
-  }
-};
-
-
-
-export const obtenerHorasDisponiblesDelMedicoProximosDias = async (req, res) => {
-  const { medicoId, especialidadId } = req.body;
-
-  try {
-
-    if (!mongoose.Types.ObjectId.isValid(medicoId)) {
-      return res.status(400).json({ mensaje: "ID de médico no válido" });
-    }
-
-    const medico = await User.findById(medicoId);
-
-    if (!medico) {
-      return res.status(404).json({ mensaje: "Médico no encontrado" });
-    }
-
-
-    if (!medico.disponibilidad || medico.disponibilidad.length === 0) {
-      return res.status(404).json({ mensaje: "El médico no tiene disponibilidades registradas." });
-    }
-
-    const disponibilidadPorEspecialidad = medico.disponibilidad.filter(
-      (dispo) => dispo.especialidad.toString() === especialidadId
-    );
-
-    if (disponibilidadPorEspecialidad.length === 0) {
-      return res.status(404).json({ mensaje: "El médico no tiene disponibilidades para esta especialidad." });
-    }
-
-
+    // Determinar la duración del intervalo dependiendo de la especialidad
     const especialidad = await Especialidades.findById(especialidadId);
-    let intervaloMinutos = especialidad && especialidad.name.toLowerCase() === 'medicina general' ? 20 : 30;
+    const duracion = especialidad.name.toLowerCase().includes("medicina general") ? 20 : 30;
 
-    // Obtener la fecha actual y los próximos 30 días
-    const fechaActual = new Date();
-    const diasProximos = eachDayOfInterval({
-      start: fechaActual,
-      end: addDays(fechaActual, 30),
-    });
-
-    const respuesta = [];
-
-    for (let dia of diasProximos) {
-      const diaSemana = format(dia, 'EEEE', { locale: es }).toLowerCase();
-
-      const disponibilidadDia = disponibilidadPorEspecialidad.find(
-        (dispo) => dispo.dia.toLowerCase() === diaSemana
-      );
-
-      if (disponibilidadDia) {
-
-        const inicioDelDia = new Date(dia);
-        inicioDelDia.setHours(0, 0, 0, 0);
-        const finDelDia = new Date(dia);
-        finDelDia.setHours(23, 59, 59, 999);
-
-        const reservas = await ReservaCita.find({
-          medico: medicoId,
-          especialidad_solicitada: especialidadId,
-        }).select('fechaReserva horaInicio horaFin estado_horario -_id');
-
-
-        const horasLibres = [];
-        let horaActual = formatearHora(disponibilidadDia.inicio);
-        const horaFin = formatearHora(disponibilidadDia.fin);
-
-        while (horaActual < horaFin) {
-          const siguienteHora = sumarIntervalo(horaActual, intervaloMinutos);
-
-          const horaOcupada = reservas.some((reserva) => {
-            const reservaInicio = formatearHora(reserva.horaInicio);
-            const reservaFin = formatearHora(reserva.horaFin);
-            return (
-              horaActual >= reservaInicio &&
-              horaActual < reservaFin &&
-              reserva.estado_horario === 'OCUPADO'
-            );
-          });
-
-          console.log(`Hora ${horaActual}: ${horaOcupada ? 'OCUPADO' : 'LIBRE'}`);
-
-          horasLibres.push({
-            hora: horaActual,
-            estado: horaOcupada ? 'OCUPADO' : 'LIBRE',
-          });
-
-          horaActual = siguienteHora;
-        }
-
-        respuesta.push({
-          fecha: format(dia, 'yyyy-MM-dd'),
-          horas: horasLibres,
-        });
-      }
+    // Validar que la hora de inicio esté alineada con los intervalos permitidos (20 minutos para medicina general, 30 para otras)
+    if (!esHoraValida(horaInicio, duracion)) {
+      return res.status(400).json({
+        response: "error",
+        message: `La hora de inicio debe estar alineada a los intervalos de ${duracion} minutos. Ejemplos válidos: 08:00, 08:20, 08:40, etc.`
+      });
     }
 
-    res.json(respuesta);
+    // Verificar que la hora de inicio permita que la hora de fin no exceda la disponibilidad del médico
+    const horaFin = sumarMinutos(horaInicio, duracion);
+    if (!verificarHoraFinDentroRango(horaInicio, duracion, disponibilidad.fin)) {
+      return res.status(400).json({
+        response: "error",
+        message: `La hora de fin ${horaFin} excede la disponibilidad del médico, que es hasta ${disponibilidad.fin}.`
+      });
+    }
+
+    // Verificar si ya existe una reserva en el mismo horario para el médico
+    const reservaExistente = await ReservaCita.findOne({
+      medico: medicoId,
+      fechaReserva: new Date(fechaReserva),
+      horaInicio,
+      horaFin
+    });
+
+    if (reservaExistente) {
+      return res.status(400).json({ response: "error", message: "El médico ya tiene una reserva en ese horario." });
+    }
+
+    // Crear una nueva reserva
+    const nuevaReserva = new ReservaCita({
+      paciente: pacienteId,
+      medico: medicoId,
+      especialidad_solicitada: especialidadId,
+      fechaReserva: new Date(fechaReserva),
+      horaInicio,
+      horaFin,
+    });
+
+    // Guardar la reserva en la base de datos
+    await nuevaReserva.save();
+
+    return res.status(201).json({
+      response: "success",
+      message: "Reserva creada exitosamente.",
+      reserva: nuevaReserva
+    });
   } catch (error) {
-    res.status(500).json({ mensaje: 'Error del servidor al obtener las horas disponibles', error: error.message });
+    console.error("Error al registrar la reserva:", error);
+    return res.status(500).json({ response: "error", message: "Error del servidor al registrar la reserva." });
   }
 };
 
-// Función auxiliar para formatear la hora
-function formatearHora(hora) {
-  // Si la hora ya está en formato HH:mm, la devolvemos tal cual
-  if (/^\d{2}:\d{2}$/.test(hora)) {
-    return hora;
+
+// Obtener todas las citas
+export const getCitas = async (req, res) => {
+  try {
+    const citas = await ReservaCita.find()
+      .populate('paciente', 'name lastname')
+      .populate('medico', 'name lastname')
+      .populate('especialidad_solicitada', 'name');
+
+    if (citas.length === 0) {
+      return res.status(404).json({ response: "error", message: "No se encontraron citas." });
+    }
+
+    return res.status(200).json({ response: "success", citas });
+  } catch (error) {
+    console.error("Error al obtener las citas:", error);
+    return res.status(500).json({ response: "error", message: "Error del servidor al obtener las citas." });
+  }
+};
+
+
+// Obtener una cita por su ID
+export const getCitaById = async (req, res) => {
+  const { citaId } = req.params;
+
+  // Validar que el ID proporcionado sea un ObjectId válido
+  if (!mongoose.Types.ObjectId.isValid(citaId)) {
+    return res.status(400).json({ response: "error", message: "ID de cita inválido." });
   }
 
-  // Si la hora está en formato H:mm, añadimos un 0 al principio
-  if (/^\d:\d{2}$/.test(hora)) {
-    return `0${hora}`;
+  try {
+    const cita = await ReservaCita.findById(citaId)
+      .populate('paciente', 'name lastname')
+      .populate('medico', 'name lastname')
+      .populate('especialidad_solicitada', 'name');
+
+    if (!cita) {
+      return res.status(404).json({ response: "error", message: "Cita no encontrada." });
+    }
+
+    return res.status(200).json({ response: "success", cita });
+  } catch (error) {
+    console.error("Error al obtener la cita:", error);
+    return res.status(500).json({ response: "error", message: "Error del servidor al obtener la cita." });
+  }
+};
+
+
+// Eliminar una cita (solo si el estado es "cancelado")
+export const eliminarCita = async (req, res) => {
+  const { citaId } = req.params;
+
+  // Validar que el ID proporcionado sea un ObjectId válido
+  if (!mongoose.Types.ObjectId.isValid(citaId)) {
+    return res.status(400).json({ response: "error", message: "ID de cita inválido." });
   }
 
-  // Si la hora está en otro formato (por ejemplo, 9:5), la formateamos correctamente
-  const [horas, minutos] = hora.split(':').map(Number);
-  return `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}`;
-}
+  try {
+    // Buscar la cita por su ID
+    const cita = await ReservaCita.findById(citaId);
 
-// Función auxiliar para sumar un intervalo de minutos a una hora en formato string
-function sumarIntervalo(hora, minutos) {
-  const [horas, mins] = hora.split(':').map(Number);
-  const totalMinutos = horas * 60 + mins + minutos;
-  const nuevasHoras = Math.floor(totalMinutos / 60);
-  const nuevosMinutos = totalMinutos % 60;
-  return formatearHora(`${nuevasHoras}:${nuevosMinutos}`);
-}
+    if (!cita) {
+      return res.status(404).json({ response: "error", message: "Cita no encontrada." });
+    }
+
+    // Verificar si el estado de la cita es "cancelado"
+    if (cita.estado !== 'cancelado') {
+      return res.status(400).json({
+        response: "error",
+        message: `No se puede eliminar la cita. El estado actual es: ${cita.estado}.`
+      });
+    }
+
+    // Eliminar la cita
+    await cita.remove(citaId);
+
+    return res.status(200).json({
+      response: "success",
+      message: "Cita eliminada exitosamente."
+    });
+  } catch (error) {
+    console.error("Error al eliminar la cita:", error);
+    return res.status(500).json({ response: "error", message: "Error del servidor al eliminar la cita." });
+  }
+};

@@ -1,7 +1,4 @@
-import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
 import { User } from "../models/user.model.js";
-import { Role } from "../models/role.model.js";
 import { generateJwt } from "../helpers/token.helper.js";
 import {
   sendVerificationEmail,
@@ -9,72 +6,61 @@ import {
 } from "../services/email.service.js";
 import crypto from "crypto";
 
+// Login y envío de código de verificación por correo
 export const login = async (req, res) => {
   try {
-    const user = await User.findOne({ email: req.body.email }).populate(
-      "roles"
-    );
+    const user = await User.findOne({ email: req.body.email }).populate("roles");
 
-    if (!user)
-      return res.status(400).json({ message: "Usuario no encontrado" });
+    if (!user) {
+      return res.status(400).json({
+        status: "error",
+        message: "Usuario no encontrado"
+      });
+    }
 
-    const matchPassword = await User.comparePassword(
-      req.body.password,
-      user.password
-    );
+    const matchPassword = await User.comparePassword(req.body.password, user.password);
 
-    if (!matchPassword)
+    if (!matchPassword) {
       return res.status(401).json({
-        token: null,
+        status: "error",
         message: "Contraseña inválida"
       });
+    }
 
-    const verificationCode = crypto.randomBytes(3).toString("hex"); // Genera un código de 6 caracteres
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
     user.verificationCode = verificationCode;
     user.verificationCodeExpires = Date.now() + 3600000; // El código expira en 1 hora
     await user.save();
 
     await sendVerificationEmail(user.email, verificationCode);
 
-    console.log(`Codigo para el correo ${user.email} es : ${verificationCode}`);
+    console.log(`Codigo para el correo ${user.email} es: ${verificationCode}`);
 
-    return res
-      .status(200)
-      .json({
-        response: "success",
-        message: "Código de verificación enviado al correo electrónico"
-      });
+    return res.status(200).json({
+      status: "success",
+      message: "Código de verificación enviado al correo electrónico"
+    });
   } catch (error) {
     console.log(error);
-    return res
-      .status(500)
-      .json({
-        response: "error",
-        message: "Error del servidor al enviar el código de verificación"
-      });
+    return res.status(500).json({
+      status: "error",
+      message: "Error del servidor al enviar el código de verificación"
+    });
   }
 };
 
+// Verificación del código de verificación enviado por correo
 export const verifyCodeHandler = async (req, res) => {
   const { email, code } = req.body;
 
   try {
-    const user = await User.findOne({ email: email.toLowerCase() }).populate(
-      "roles",
-      "name"
-    );
+    const user = await User.findOne({ email: email.toLowerCase() }).populate("roles", "name");
 
-    if (
-      !user ||
-      user.verificationCode !== code ||
-      user.verificationCodeExpires < Date.now()
-    ) {
-      return res
-        .status(400)
-        .json({
-          response: "error",
-          message: "Código de verificación inválido o expirado"
-        });
+    if (!user || user.verificationCode !== code.trim() || user.verificationCodeExpires < Date.now()) {
+      return res.status(400).json({
+        status: "error",
+        message: "Código de verificación inválido o expirado"
+      });
     }
 
     user.verificationCode = null;
@@ -82,39 +68,40 @@ export const verifyCodeHandler = async (req, res) => {
     await user.save();
 
     const access_token = generateJwt(user._id);
-    const roleNames = user.roles.map((role) => role.name);
+    const roleNames = user.roles.map(role => role.name);
 
     return res.status(200).json({
-      response: "success",
+      status: "success",
       user: {
         access_token,
         name: user.name,
         lastname: user.lastname,
         email: user.email,
         _id: user._id,
-        roles: user.roles
+        roles: roleNames
       }
     });
   } catch (error) {
     console.log(error);
-    return res
-      .status(500)
-      .json({
-        response: "error",
-        message: "Error del servidor al verificar el código"
-      });
+    return res.status(500).json({
+      status: "error",
+      message: "Error del servidor al verificar el código"
+    });
   }
 };
 
+// Manejo de solicitud de restablecimiento de contraseña
 export const forgotPasswordHandler = async (req, res) => {
   const { email } = req.body;
 
   try {
     const user = await User.findOne({ email: email.toLowerCase() });
+
     if (!user) {
-      return res
-        .status(404)
-        .json({ response: "error", message: "Usuario no encontrado" });
+      return res.status(404).json({
+        status: "error",
+        message: "Usuario no encontrado"
+      });
     }
 
     const resetToken = crypto.randomBytes(20).toString("hex");
@@ -123,35 +110,30 @@ export const forgotPasswordHandler = async (req, res) => {
     await user.save();
 
     await sendPasswordResetEmail(user.email, resetToken);
-    console.log(`Token para el correo ${user.email} es : ${resetToken}`);
-    return res
-      .status(200)
-      .json({
-        response: "success",
-        message: "Correo de restablecimiento de contraseña enviado"
-      });
+    console.log(`Token para el correo ${user.email} es: ${resetToken}`);
+
+    return res.status(200).json({
+      status: "success",
+      message: "Correo de restablecimiento de contraseña enviado"
+    });
   } catch (error) {
     console.log(error);
-    return res
-      .status(500)
-      .json({
-        response: "error",
-        message:
-          "Error del servidor al enviar el correo de restablecimiento de contraseña"
-      });
+    return res.status(500).json({
+      status: "error",
+      message: "Error del servidor al enviar el correo de restablecimiento de contraseña"
+    });
   }
 };
 
+// Manejo del restablecimiento de contraseña
 export const resetPasswordHandler = async (req, res) => {
   const { token, password } = req.body;
 
   if (!token || !password) {
-    return res
-      .status(400)
-      .json({
-        response: "error",
-        message: "Token y nueva contraseña son obligatorios"
-      });
+    return res.status(400).json({
+      status: "error",
+      message: "Token y nueva contraseña son obligatorios"
+    });
   }
 
   try {
@@ -161,29 +143,27 @@ export const resetPasswordHandler = async (req, res) => {
     });
 
     if (!user) {
-      return res
-        .status(400)
-        .json({ response: "error", message: "Token inválido o expirado" });
+      return res.status(400).json({
+        status: "error",
+        message: "Token inválido o expirado"
+      });
     }
 
+    // Actualizar la contraseña
     user.password = password;
     user.resetPasswordToken = null;
     user.resetPasswordExpires = null;
     await user.save();
 
-    return res
-      .status(200)
-      .json({
-        response: "success",
-        message: "Contraseña restablecida exitosamente"
-      });
+    return res.status(200).json({
+      status: "success",
+      message: "Contraseña restablecida exitosamente"
+    });
   } catch (error) {
     console.log(error);
-    return res
-      .status(500)
-      .json({
-        response: "error",
-        message: "Error del servidor al restablecer la contraseña"
-      });
+    return res.status(500).json({
+      status: "error",
+      message: "Error del servidor al restablecer la contraseña"
+    });
   }
 };
