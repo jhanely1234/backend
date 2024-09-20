@@ -213,7 +213,7 @@ export const eliminarConsulta = async (req, res) => {
   }
 };
 
-// Controlador para obtener los detalles de una consulta de un paciente específico
+/* Controlador para obtener los detalles de una consulta de un paciente específico
 export const getDetallesConsultaPorPaciente = async (req, res) => {
   const { pacienteId, consultaId } = req.params;
 
@@ -377,3 +377,4 @@ Fecha de Consulta: ${consulta.fechaHora.toLocaleDateString()}
     });
   }
 };
+*/

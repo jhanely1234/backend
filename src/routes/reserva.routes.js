@@ -16,8 +16,6 @@ import {
   obtenerConsultaPorId,
   actualizarConsulta,
   eliminarConsulta,
-  getDetallesConsultaPorPaciente,
-  enviarRecetaPorWhatsApp
 } from "../controllers/consulta.controller.js";
 import { checkAuth } from "../middlewares/auth.middlleware.js";
 
@@ -40,7 +38,5 @@ router.get("/consulta", obtenerTodasLasConsultas);
 router.get("/consulta/:id", obtenerConsultaPorId);
 router.put("/consulta/:consultaId", actualizarConsulta);
 router.delete("/consulta/:id", eliminarConsulta);
-router.get("/consulta/:consultaId/receta/:pacienteId", getDetallesConsultaPorPaciente);
-router.post("/consulta/:consultaId/enviar-receta", enviarRecetaPorWhatsApp);
 
 export default router;

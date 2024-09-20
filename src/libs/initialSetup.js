@@ -1,25 +1,38 @@
 import { Role } from "../models/role.model.js";
 import { User } from "../models/user.model.js";
+import { Especialidades } from "../models/especialidad.model.js"; // Asegúrate de que la ruta sea correcta
 
 const ADMIN_EMAIL = 'admin@admin.com'; // Email del administrador
 const ADMIN_USERNAME = 'Admin'; // Nombre de usuario del administrador
-const ADMIN_LASTNAME = 'Principal'; // Nombre de usuario del administrador
+const ADMIN_LASTNAME = 'Principal'; // Apellido del administrador
 const ADMIN_PASSWORD = 'admin123'; // Contraseña del administrador
 
 const RECEPCIONISTA_EMAIL = 'recepcionista@recepcionista.com'; // Email del recepcionista
 const RECEPCIONISTA_USERNAME = 'Recepcionista'; // Nombre de usuario del recepcionista
-const RECEPCIONISTA_LASTNAME = 'Principal'; // Nombre de usuario del recepcionista
+const RECEPCIONISTA_LASTNAME = 'Principal'; // Apellido del recepcionista
 const RECEPCIONISTA_PASSWORD = 'recepcionista123'; // Contraseña del recepcionista
+
+// Lista de especialidades predefinidas
+const ESPECIALIDADES = [
+  'Cardiologia',
+  'Dermatologia',
+  'Medicina General',
+  'Ginecologia',
+  'Neurologia',
+  'Oftalmologia',
+  'Pediatria',
+  'Traumatologia'
+];
 
 export const createRoles = async () => {
   try {
-    // Count Documents
+    // Contar documentos
     const count = await Role.estimatedDocumentCount();
 
-    // check for existing roles
+    // Si ya existen roles, no hacer nada
     if (count > 0) return;
 
-    // Create default Roles
+    // Crear roles por defecto
     const values = await Promise.all([
       new Role({ name: "paciente" }).save(),
       new Role({ name: "medico" }).save(),
@@ -27,15 +40,15 @@ export const createRoles = async () => {
       new Role({ name: "recepcionista" }).save(),
     ]);
 
-    console.log(values);
+    console.log("Roles creados:", values);
   } catch (error) {
-    console.error(error);
+    console.error("Error al crear roles:", error);
   }
 };
 
 export const createAdmin = async () => {
   try {
-    // Comprobar si hay un usuario administrador existente
+    // Comprobar si ya existe un administrador
     const userFound = await User.findOne({ email: ADMIN_EMAIL });
     if (userFound) {
       console.log('Ya existe un usuario administrador registrado.');
@@ -66,7 +79,7 @@ export const createAdmin = async () => {
 
 export const createRecepcionista = async () => {
   try {
-    // Comprobar si hay un usuario administrador existente
+    // Comprobar si ya existe un recepcionista
     const userFound = await User.findOne({ email: RECEPCIONISTA_EMAIL });
     if (userFound) {
       console.log('Ya existe un usuario recepcionista registrado.');
@@ -80,7 +93,7 @@ export const createRecepcionista = async () => {
       return;
     }
 
-    // Crear un nuevo usuario recepcionista sin validar `ci`
+    // Crear un nuevo usuario recepcionista
     const newRecepcionista = await User.create({
       name: RECEPCIONISTA_USERNAME,
       lastname: RECEPCIONISTA_LASTNAME,
@@ -95,10 +108,34 @@ export const createRecepcionista = async () => {
   }
 };
 
+// Función para crear especialidades
+export const createEspecialidades = async () => {
+  try {
+    // Contar el número de especialidades existentes
+    const count = await Especialidades.estimatedDocumentCount();
+
+    // Si ya hay especialidades, no hacer nada
+    if (count > 0) return;
+
+    // Crear especialidades por defecto
+    const values = await Promise.all(
+      ESPECIALIDADES.map((especialidad) =>
+        new Especialidades({ name: especialidad }).save()
+      )
+    );
+
+    console.log("Especialidades creadas:", values);
+  } catch (error) {
+    console.error("Error al crear especialidades:", error);
+  }
+};
+
+// Función para inicializar todo
 const initialize = async () => {
   await createRoles();
   await createAdmin();
   await createRecepcionista();
+  await createEspecialidades(); // Añadido para crear especialidades
 };
 
 initialize();
