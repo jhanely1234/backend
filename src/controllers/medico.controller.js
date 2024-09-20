@@ -372,7 +372,7 @@ export const getMedicoById = async (req, res) => {
     // Buscar el médico por ID
     const medico = await User.findById(id)
       .select("-password") // Excluir el campo de contraseña
-      .populate("especialidades", "name") // Obtener los nombres de las especialidades
+      .populate("especialidades", "_id name") // Obtener los nombres de las especialidades
       .populate("roles", "name"); // Obtener los nombres de los roles
 
     if (!medico) {
@@ -381,7 +381,7 @@ export const getMedicoById = async (req, res) => {
 
     // Buscar las disponibilidades del médico
     const disponibilidades = await Disponibilidad.find({ medico: medico._id })
-      .populate("especialidad", "name"); // Obtener el nombre de la especialidad en la disponibilidad
+      .populate("especialidad", " _id name"); // Obtener el nombre de la especialidad en la disponibilidad
 
     // Devolver la información del médico junto con sus disponibilidades
     res.status(200).json({
@@ -396,13 +396,19 @@ export const getMedicoById = async (req, res) => {
         telefono: medico.telefono,
         fechaNacimiento: medico.fechaNacimiento,
         edad: medico.edad,
-        especialidades: medico.especialidades.map((esp) => esp.name),
+        especialidades: medico.especialidades.map((esp) => ({
+          _id: esp._id,
+          name: esp.name
+        })),
         disponibilidades: disponibilidades.map((disp) => ({
           dia: disp.dia,
           inicio: disp.inicio,
           fin: disp.fin,
           turno: disp.turno,
-          especialidad: disp.especialidad.name
+          especialidad: {
+            _id: disp.especialidad._id,
+            name: disp.especialidad.name
+          }
         })),
       },
     });
@@ -415,82 +421,229 @@ export const getMedicoById = async (req, res) => {
 // Actualizar médico (solo teléfono, especialidades y disponibilidades)
 export const updateMedico = async (req, res) => {
   const { id } = req.params;
-  const { telefono, especialidades, disponibilidades } = req.body;
+  const { telefono, especialidades, disponibilidad, turno } = req.body;
 
   // Validar que el ID proporcionado sea un ObjectId válido
   if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({ response: "error", message: "ID de médico inválido." });
+    return res.status(400).json({
+      response: "error",
+      message: "ID de médico inválido."
+    });
   }
 
   try {
     // Verificar si el médico existe
     const medico = await User.findById(id);
     if (!medico) {
-      return res.status(404).json({ response: "error", message: "Médico no encontrado." });
+      return res.status(404).json({
+        response: "error",
+        message: "Médico no encontrado."
+      });
     }
 
-    // Actualizar teléfono
+    // Actualizar teléfono (si se proporciona)
     if (telefono) {
       medico.telefono = telefono;
     }
 
-    // Actualizar especialidades (opcional)
-    if (especialidades) {
-      const especialidadDocuments = await Especialidades.find({
-        _id: { $in: especialidades }
+    // Eliminar todas las especialidades y disponibilidades actuales del médico
+    await Disponibilidad.deleteMany({ medico: id });
+    medico.especialidades = [];
+
+    // Validar especialidades enviadas
+    if (!especialidades || especialidades.length === 0) {
+      return res.status(400).json({
+        response: "error",
+        message: "Debe proporcionar al menos una especialidad."
       });
-
-      if (especialidadDocuments.length !== especialidades.length) {
-        return res.status(400).json({ response: "error", message: "Una o más especialidades no existen." });
-      }
-
-      medico.especialidades = especialidades;
     }
 
-    // Actualizar disponibilidades (opcional)
-    if (disponibilidades) {
-      // Eliminar todas las disponibilidades existentes para este médico
-      await Disponibilidad.deleteMany({ medico: id });
+    // Obtener las especialidades enviadas para validación
+    const especialidadDocuments = await Especialidades.find({
+      _id: { $in: especialidades }
+    });
 
-      // Crear nuevas disponibilidades
-      for (const dispo of disponibilidades) {
+    if (especialidadDocuments.length !== especialidades.length) {
+      return res.status(400).json({
+        response: "error",
+        message: "Una o más especialidades no existen."
+      });
+    }
+
+    // Buscar si alguna especialidad es "Medicina General"
+    const especialidadMedicinaGeneral = especialidadDocuments.find(
+      (especialidad) =>
+        especialidad.name.toLowerCase().includes("medicina general")
+    );
+
+    // Si se selecciona "Medicina General", el turno es obligatorio
+    if (especialidadMedicinaGeneral && !turno) {
+      return res.status(400).json({
+        response: "error",
+        message: "Si se selecciona Medicina General, el turno es obligatorio."
+      });
+    }
+
+    // Validar turno solo si se selecciona "Medicina General"
+    if (especialidadMedicinaGeneral) {
+      const turnosPermitidos = ["mañana", "tarde", "ambos"];
+      if (!turnosPermitidos.includes(turno.toLowerCase())) {
+        return res.status(400).json({
+          response: "error",
+          message: "El turno enviado no es válido. Solo se permiten los turnos: mañana, tarde, ambos."
+        });
+      }
+
+      // Validar si el turno es "ambos", no se puede tener otras especialidades
+      if (turno.toLowerCase() === "ambos" && especialidades.length > 1) {
+        return res.status(400).json({
+          response: "error",
+          message: "Si se selecciona Medicina General con turno 'ambos', no se pueden agregar otras especialidades."
+        });
+      }
+    }
+
+    // Eliminar especialidades antiguas y asignar las nuevas
+    medico.especialidades = especialidades;
+
+    // Asignar horarios automáticos si solo se selecciona Medicina General
+    let dias = [];
+    let horarios = [];
+
+    if (especialidadMedicinaGeneral) {
+      dias = ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"];
+
+      if (turno.toLowerCase() === "mañana" || turno.toLowerCase() === "ambos") {
+        dias.forEach((dia) => {
+          horarios.push({
+            dia,
+            inicio: "08:00",
+            fin: "12:00",
+            turno: "mañana",
+            especialidad: especialidadMedicinaGeneral._id
+          });
+        });
+      }
+
+      if (turno.toLowerCase() === "tarde" || turno.toLowerCase() === "ambos") {
+        dias.forEach((dia) => {
+          horarios.push({
+            dia,
+            inicio: "12:00",
+            fin: "18:00",
+            turno: "tarde",
+            especialidad: especialidadMedicinaGeneral._id
+          });
+        });
+      }
+    }
+
+    // Verificar si hay más de una especialidad, además de Medicina General
+    const especialidadesSinMedicinaGeneral = especialidadDocuments.filter(
+      (especialidad) =>
+        !especialidad.name.toLowerCase().includes("medicina general")
+    );
+
+    if (
+      especialidadesSinMedicinaGeneral.length > 0 &&
+      (!disponibilidad || disponibilidad.length === 0)
+    ) {
+      return res.status(400).json({
+        response: "error",
+        message: "Debe proporcionar disponibilidad para todas las especialidades adicionales a Medicina General."
+      });
+    }
+
+    // Validación de disponibilidad manual solo para otras especialidades
+    if (especialidadesSinMedicinaGeneral.length > 0 && disponibilidad) {
+      for (const dispo of disponibilidad) {
         if (dispo.inicio >= dispo.fin) {
+          const especialidadError = especialidadDocuments.find(
+            (especialidad) =>
+              especialidad._id.toString() === dispo.especialidad.toString()
+          );
           return res.status(400).json({
             response: "error",
-            message: `La hora de inicio (${dispo.inicio}) no puede ser mayor o igual que la hora de fin (${dispo.fin}) para el día ${dispo.dia}.`
+            message: `La hora de inicio (${dispo.inicio}) no puede ser mayor o igual que la hora de fin (${dispo.fin}) para el día ${dispo.dia} en la especialidad ${especialidadError.name}.`
           });
         }
 
-        const nuevaDisponibilidad = new Disponibilidad({
-          medico: id,
-          dia: dispo.dia,
-          inicio: dispo.inicio,
-          fin: dispo.fin,
-          turno: dispo.turno,
+        if (dispo.inicio >= "08:00" && dispo.fin <= "12:00") {
+          dispo.turno = "mañana";
+        } else if (dispo.inicio >= "12:00" && dispo.fin <= "18:00") {
+          dispo.turno = "tarde";
+        } else {
+          return res.status(400).json({
+            response: "error",
+            message: `El rango de horas para el día ${dispo.dia} no coincide con los turnos permitidos (08:00-12:00 para mañana, 12:00-18:00 para tarde).`
+          });
+        }
+
+        const conflictos = horarios.filter(
+          (horario) =>
+            horario.dia === dispo.dia &&
+            ((horario.inicio < dispo.fin && horario.fin > dispo.inicio) ||
+              (dispo.inicio < horario.fin && dispo.fin > horario.inicio))
+        );
+
+        if (conflictos.length > 0) {
+          const nombresEspecialidadesConflicto = conflictos.map((conflict) => {
+            const conflictEspecialidad = especialidadDocuments.find(
+              (especialidad) =>
+                especialidad._id.toString() === conflict.especialidad.toString()
+            );
+            return conflictEspecialidad.name;
+          });
+
+          return res.status(400).json({
+            response: "error",
+            message: `Conflicto de disponibilidad el ${dispo.dia} de ${dispo.inicio} a ${dispo.fin}. Debes cambiar los horarios de las siguientes especialidades: ${nombresEspecialidadesConflicto.join(", ")}.`
+          });
+        }
+
+        horarios.push({
+          ...dispo,
           especialidad: dispo.especialidad
         });
-
-        await nuevaDisponibilidad.save();
       }
     }
 
+    // Guardar las nuevas disponibilidades en el modelo de Disponibilidad
+    for (const horario of horarios) {
+      const nuevaDisponibilidad = new Disponibilidad({
+        medico: id,
+        dia: horario.dia,
+        inicio: horario.inicio,
+        fin: horario.fin,
+        turno: horario.turno,
+        especialidad: horario.especialidad
+      });
+      await nuevaDisponibilidad.save();
+    }
+
     // Guardar el médico actualizado
-    const medicoActualizado = await medico.save();
+    await medico.save();
 
     return res.status(200).json({
       response: "success",
       message: "Médico actualizado con éxito.",
       medico: {
-        _id: medicoActualizado._id,
-        name: medicoActualizado.name,
-        lastname: medicoActualizado.lastname,
-        telefono: medicoActualizado.telefono,
-        especialidades: medicoActualizado.especialidades
+        _id: medico._id,
+        name: medico.name,
+        lastname: medico.lastname,
+        telefono: medico.telefono,
+        especialidades: especialidadDocuments.map((especialidad) => ({
+          _id: especialidad._id,
+          name: especialidad.name
+        }))
       }
     });
   } catch (error) {
     console.error("Error al actualizar médico:", error);
-    return res.status(500).json({ response: "error", message: "Error del servidor al actualizar el médico." });
+    return res.status(500).json({
+      response: "error",
+      message: "Error del servidor al actualizar el médico."
+    });
   }
 };
 
@@ -703,5 +856,86 @@ export const getCalendarioMedicoPorEspecialidad = async (req, res) => {
   } catch (error) {
     console.error("Error al generar el calendario:", error);
     return res.status(500).json({ response: "error", message: "Error del servidor al generar el calendario." });
+  }
+};
+
+
+// Obtener las disponibilidades de un médico organizadas por especialidad
+export const getDisponibilidadesOrganizadas = async (req, res) => {
+  const { id } = req.params;
+
+  // Validar que el ID proporcionado sea un ObjectId válido
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ response: "error", message: "ID de médico inválido." });
+  }
+
+  try {
+    // Buscar al médico por ID
+    const medico = await User.findById(id)
+      .select("-password") // Excluir el campo de contraseña
+      .populate("especialidades", "_id name") // Obtener las especialidades del médico
+      .populate("roles", "name"); // Obtener los nombres de los roles
+
+    if (!medico) {
+      return res.status(404).json({ response: "error", message: "Médico no encontrado." });
+    }
+
+    // Buscar las disponibilidades del médico
+    const disponibilidades = await Disponibilidad.find({ medico: medico._id })
+      .populate("especialidad", "_id name"); // Obtener el _id y el nombre de la especialidad en la disponibilidad
+
+    // Organizar las disponibilidades por especialidad
+    const disponibilidadesOrganizadas = medico.especialidades.map((especialidad) => {
+      // Filtrar las disponibilidades según la especialidad actual
+      const disponibilidadPorEspecialidad = disponibilidades.filter((disp) =>
+        disp.especialidad._id.equals(especialidad._id)
+      );
+
+      // Si la especialidad es "Medicina General", solo mostrar el turno
+      if (especialidad.name.toLowerCase().includes("medicina general")) {
+        const turnos = [...new Set(disponibilidadPorEspecialidad.map((disp) => disp.turno))]; // Obtener turnos únicos
+        return {
+          especialidad: {
+            _id: especialidad._id,
+            name: especialidad.name,
+          },
+          turno: turnos.length > 0 ? turnos.join(", ") : "Sin turno disponible", // Mostrar los turnos únicos
+        };
+      } else {
+        // Para otras especialidades, mostrar los días, horas y turnos
+        return {
+          especialidad: {
+            _id: especialidad._id,
+            name: especialidad.name,
+          },
+          disponibilidades: disponibilidadPorEspecialidad.map((disp) => ({
+            dia: disp.dia,
+            inicio: disp.inicio,
+            fin: disp.fin,
+            turno: disp.turno,
+          })),
+        };
+      }
+    });
+
+    // Devolver la respuesta organizada por especialidad
+    res.status(200).json({
+      response: "success",
+      medico: {
+        _id: medico._id,
+        name: medico.name,
+        lastname: medico.lastname,
+        email: medico.email,
+        ci: medico.ci,
+        genero: medico.genero,
+        telefono: medico.telefono,
+        fechaNacimiento: medico.fechaNacimiento,
+        edad: medico.edad,
+        especialidades: disponibilidadesOrganizadas,
+      },
+    });
+  } catch (error) {
+    console.error("Error al obtener las disponibilidades del médico:", error);
+    res.status(500).json({ response: "error", message: "Error del servidor al obtener las disponibilidades." });
   }
 };

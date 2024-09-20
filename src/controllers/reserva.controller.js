@@ -1,199 +1,11 @@
-/*
-import { ReservaCita } from "../models/reserva.model.js";
-import { User } from "../models/user.model.js";
-import { Especialidades } from "../models/especialidad.model.js";
-import sendWhatsAppMessage from "../services/twilio.service.js";
-import mongoose from "mongoose";
-import { addDays, eachDayOfInterval, format } from 'date-fns';
-import { parseISO, add, differenceInMilliseconds, isWithinInterval } from "date-fns";
-import { es } from "date-fns/locale/es";
-
-
-export const createReservaCita = async (req, res) => {
-  const { pacienteId, medicoId, especialidadId, fechaReserva, horaInicio } = req.body;
-
-  try {
-    console.log("Iniciando creación de reserva de cita...");
-
-    // Verificar que el médico exista y tenga la especialidad seleccionada
-    console.log("Buscando al médico...");
-    const medico = await User.findById(medicoId).populate("especialidades roles", "-password");
-
-    if (!medico || !medico.especialidades.some((e) => e._id.toString() === especialidadId)) {
-      console.log("El médico no existe o no tiene la especialidad seleccionada.");
-      return res.status(400).json({ message: "El médico no tiene la especialidad seleccionada." });
-    }
-
-    console.log("Médico encontrado:", medico.name);
-
-    // Verificar si existe disponibilidad y que esté bien definida
-    if (!medico.disponibilidad || medico.disponibilidad.length === 0) {
-      console.log("El médico no tiene disponibilidades registradas.");
-      return res.status(400).json({ message: "El médico no tiene disponibilidades registradas." });
-    }
-
-    // Imprimir la disponibilidad del médico para revisar los datos
-    console.log("Disponibilidades del médico:", medico.disponibilidad);
-
-    // Obtener la disponibilidad del médico para la especialidad seleccionada
-    const disponibilidadEspecialidad = medico.disponibilidad.find(
-      (disp) => disp.especialidad.toString() === especialidadId
-    );
-
-    // Verificar que se haya encontrado una disponibilidad para esa especialidad
-    if (!disponibilidadEspecialidad) {
-      console.log("No se encontró disponibilidad para la especialidad seleccionada.");
-      return res.status(400).json({ message: "El médico no tiene disponibilidad para la especialidad seleccionada." });
-    }
-
-    console.log("Disponibilidad encontrada para la especialidad seleccionada:", disponibilidadEspecialidad);
-
-    // Validar el día de la semana de la fecha de reserva
-    const fechaReservaDate = parseISO(fechaReserva);
-    let diaSemana = format(fechaReservaDate, "EEEE", { locale: es }).toLowerCase();
-    diaSemana = diaSemana.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // Normaliza caracteres especiales
-
-    // Validar si la fecha de la reserva coincide con la disponibilidad del médico para ese día de la semana
-    const disponibilidadDia = disponibilidadEspecialidad.dia.toLowerCase() === diaSemana;
-
-    if (!disponibilidadDia) {
-      console.log("El día seleccionado no coincide con la disponibilidad del médico.");
-      return res.status(400).json({
-        message: `El médico solo está disponible los ${disponibilidadEspecialidad.dia} para esta especialidad.`
-      });
-    }
-
-    // Validar si la hora de inicio está dentro del rango de horas disponibles
-    if (!isWithinInterval(parseISO(`${fechaReserva}T${horaInicio}:00`), {
-      start: parseISO(`${fechaReserva}T${disponibilidadEspecialidad.inicio}:00`),
-      end: parseISO(`${fechaReserva}T${disponibilidadEspecialidad.fin}:00`)
-    })) {
-      console.log("La hora seleccionada no está dentro del rango de horas disponibles.");
-      return res.status(400).json({
-        message: `El médico está disponible entre las ${disponibilidadEspecialidad.inicio} y ${disponibilidadEspecialidad.fin} para esta especialidad.`
-      });
-    }
-
-    // Validar que la hora de inicio no sea igual a la hora de fin
-    if (horaInicio === disponibilidadEspecialidad.fin) {
-      console.log("No se puede crear la reserva porque la hora de inicio coincide con la hora de fin del médico.");
-      return res.status(400).json({
-        message: "No se puede crear la reserva porque la hora de inicio coincide con la hora de fin del médico."
-      });
-    }
-
-    // Verificar que la especialidad exista
-    console.log("Verificando la especialidad...");
-    const especialidad = await Especialidades.findById(especialidadId);
-    if (!especialidad) {
-      console.log("La especialidad no existe.");
-      return res.status(400).json({ message: "La especialidad no existe." });
-    }
-
-    console.log("Especialidad encontrada:", especialidad.name);
-
-    // Determinar la duración de la cita según la especialidad
-    let duracionCitaMinutos = 30; // Por defecto 30 minutos para otras especialidades
-    if (especialidad.name.toLowerCase() === "medicina general") {
-      duracionCitaMinutos = 20; // 20 minutos para Medicina General
-    }
-
-    // Calcular horaFin según la duración de la cita
-    const horaFin = format(
-      add(parseISO(`${fechaReserva}T${horaInicio}:00`), { minutes: duracionCitaMinutos }),
-      "HH:mm"
-    );
-
-    console.log(`La cita durará ${duracionCitaMinutos} minutos. Hora fin: ${horaFin}`);
-
-    // Verificar que no exista una reserva en la misma fecha y hora
-    console.log("Verificando reserva existente...");
-    const reservaExistente = await ReservaCita.findOne({
-      medico: medicoId,
-      fechaReserva: new Date(fechaReserva),
-      horaInicio: horaInicio,
-      horaFin: horaFin
-    });
-
-    if (reservaExistente) {
-      console.log("Ya existe una reserva en la misma fecha y hora.");
-      return res.status(400).json({ message: "Ya existe una reserva en la misma fecha y hora." });
-    }
-
-    console.log("No existe reserva previa en la misma fecha y hora.");
-
-    // Verificar que el paciente exista
-    console.log("Buscando al paciente...");
-    const paciente = await User.findById(pacienteId).populate("roles", "-password");
-    if (!paciente) {
-      console.log("El paciente no existe.");
-      return res.status(400).json({ message: "El paciente no existe." });
-    }
-
-    console.log("Paciente encontrado:", paciente.name);
-
-    // Crear y guardar la reserva
-    console.log("Creando y guardando reserva de cita...");
-    const reserva = new ReservaCita({
-      paciente: pacienteId,
-      medico: medicoId,
-      especialidad_solicitada: especialidadId,
-      fechaReserva: new Date(fechaReserva),
-      horaInicio: horaInicio,
-      horaFin: horaFin,
-      estado_horario: 'OCUPADO'
-    });
-    await reserva.save();
-
-    console.log("Reserva de cita creada correctamente.");
-
-    // Programar el envío de notificación por WhatsApp después de 2 minutos
-    const mensajePaciente =
-      `👋👨‍⚕️ *Hola ${paciente.name} ${paciente.lastname}*,\n\n` +
-      `📅 Tu reserva con _${medico.name} ${medico.lastname}_\n\n` +
-      `👩‍⚕️ en la especialidad de *${especialidad.name}*\n\n` +
-      `⏰ está programada para la fecha *${format(fechaReservaDate, "EEEE d 'de' MMMM", { locale: es })}*.\n\n` +
-      `✅ Horario: *${horaInicio} - ${horaFin}*\n\n` +
-      `✅ Por favor, confirma tu asistencia o cancela la cita.`;
-
-    const mensajeMedico =
-      `👋👨‍⚕️ *Hola Dr. ${medico.name} ${medico.lastname}*,\n\n` +
-      `👤 Tiene una nueva reserva con el paciente *${paciente.name} ${paciente.lastname}*\n\n` +
-      `👩‍⚕️ en la especialidad de *${especialidad.name}*\n\n` +
-      `⏰ programada para la fecha *${format(fechaReservaDate, "EEEE d 'de' MMMM", { locale: es })}*.\n\n` +
-      `✅ Horario: *${horaInicio} - ${horaFin}*\n\n` +
-      `✅ Por favor, confirme o cancele la cita.`;
-
-    setTimeout(async () => {
-      try {
-        await sendWhatsAppMessage(mensajePaciente, paciente.telefono);
-        await sendWhatsAppMessage(mensajeMedico, medico.telefono);
-      } catch (error) {
-        console.error("Error al enviar mensaje de WhatsApp:", error);
-      }
-    }, 2 * 60 * 1000); // Esperar 2 minutos antes de enviar
-
-    res.status(201).json({
-      response: "success",
-      message: "Reserva de cita creada correctamente"
-    });
-  } catch (error) {
-    console.error("Error en la creación de reserva de cita:", error);
-    res.status(500).json({
-      response: "error",
-      message: "Error del servidor al crear la reserva de cita"
-    });
-  }
-};
-*/
-
-//registrar reserva
-
 import { User } from '../models/user.model.js';
 import { Especialidades } from '../models/especialidad.model.js';
 import { ReservaCita } from '../models/reserva.model.js';
 import { Disponibilidad } from '../models/disponibilidad.model.js';
 import mongoose from 'mongoose';
+import axios from 'axios'; // Para hacer la llamada a la API de WhatsApp
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 // Función para sumar minutos a una hora
 const sumarMinutos = (hora, minutos) => {
@@ -215,6 +27,24 @@ const esHoraValida = (horaInicio, duracion) => {
 const verificarHoraFinDentroRango = (horaInicio, duracion, horaFinDisponibilidad) => {
   const horaFinCalculada = sumarMinutos(horaInicio, duracion);
   return horaFinCalculada <= horaFinDisponibilidad; // Retorna true si la hora de fin calculada está dentro del rango permitido
+};
+
+// Función para enviar mensajes por WhatsApp usando la API de WhatsApp
+const enviarMensajeWhatsApp = async (telefono, mensaje) => {
+  try {
+    const response = await axios.post(process.env.WHATSAPP_API_URL, {
+      message: mensaje,
+      phone: telefono
+    });
+
+    if (response.status === 200) {
+      console.log(`Mensaje enviado exitosamente a ${telefono}`);
+    } else {
+      console.error(`Error al enviar el mensaje a ${telefono}: ${response.statusText}`);
+    }
+  } catch (error) {
+    console.error(`Error al enviar el mensaje a ${telefono}:`, error.message);
+  }
 };
 
 // Controlador para crear una reserva
@@ -257,14 +87,6 @@ export const registrarReserva = async (req, res) => {
       return res.status(400).json({ response: "error", message: "El médico no tiene disponibilidad para esta especialidad." });
     }
 
-    // Verificar si la hora de inicio está dentro de la disponibilidad del médico
-    if (horaInicio < disponibilidad.inicio || horaInicio >= disponibilidad.fin) {
-      return res.status(400).json({
-        response: "error",
-        message: `El médico solo está disponible entre ${disponibilidad.inicio} y ${disponibilidad.fin}.`
-      });
-    }
-
     // Determinar la duración del intervalo dependiendo de la especialidad
     const especialidad = await Especialidades.findById(especialidadId);
     const duracion = especialidad.name.toLowerCase().includes("medicina general") ? 20 : 30;
@@ -286,16 +108,38 @@ export const registrarReserva = async (req, res) => {
       });
     }
 
-    // Verificar si ya existe una reserva en el mismo horario para el médico
-    const reservaExistente = await ReservaCita.findOne({
-      medico: medicoId,
-      fechaReserva: new Date(fechaReserva),
-      horaInicio,
-      horaFin
+    // Verificar si el paciente ya tiene una reserva en la misma especialidad y fecha
+    const fechaReservaDate = new Date(fechaReserva);
+    const reservaMismaEspecialidad = await ReservaCita.findOne({
+      paciente: pacienteId,
+      especialidad_solicitada: especialidadId,
+      fechaReserva: {
+        $gte: new Date(fechaReservaDate.setHours(0, 0, 0, 0)),
+        $lt: new Date(fechaReservaDate.setHours(23, 59, 59, 999))
+      }
     });
 
-    if (reservaExistente) {
-      return res.status(400).json({ response: "error", message: "El médico ya tiene una reserva en ese horario." });
+    if (reservaMismaEspecialidad) {
+      return res.status(400).json({
+        response: "error",
+        message: "Ya tienes una reserva en esta especialidad para el mismo día."
+      });
+    }
+
+    // Verificar si el paciente ya tiene 3 reservas en el mismo día
+    const reservasTotalesDia = await ReservaCita.countDocuments({
+      paciente: pacienteId,
+      fechaReserva: {
+        $gte: new Date(fechaReservaDate.setHours(0, 0, 0, 0)),
+        $lt: new Date(fechaReservaDate.setHours(23, 59, 59, 999))
+      }
+    });
+
+    if (reservasTotalesDia >= 3) {
+      return res.status(400).json({
+        response: "error",
+        message: "No puedes tener más de 3 reservas en un solo día."
+      });
     }
 
     // Crear una nueva reserva
@@ -311,9 +155,24 @@ export const registrarReserva = async (req, res) => {
     // Guardar la reserva en la base de datos
     await nuevaReserva.save();
 
+    // Mensajes para paciente y médico
+    const mensajePaciente = `👋👨‍⚕️ *Hola ${paciente.name} ${paciente.lastname}*,\n\n` +
+      `📅 Tu reserva está registrada en el sistema y está pendiente de confirmación por parte del médico.\n\n` +
+      `✅ Te notificaremos cuando el médico confirme tu cita.`;
+
+    const mensajeMedico = `👋👨‍⚕️ *Hola Dr. ${medico.name} ${medico.lastname}*,\n\n` +
+      `👤 Tiene una nueva reserva con el paciente *${paciente.name} ${paciente.lastname}* en la especialidad de *${especialidad.name}*.\n\n` +
+      `✅ Fecha de la reserva: *${format(new Date(fechaReserva), "EEEE d 'de' MMMM", { locale: es })}*\n` +
+      `✅ Horario: *${horaInicio} - ${horaFin}*.\n\n` +
+      `✅ Por favor, confirme o cancele la cita en el sistema.`;
+
+    // Enviar los mensajes por WhatsApp al paciente y al médico
+    await enviarMensajeWhatsApp(paciente.telefono, mensajePaciente);
+    await enviarMensajeWhatsApp(medico.telefono, mensajeMedico);
+
     return res.status(201).json({
       response: "success",
-      message: "Reserva creada exitosamente.",
+      message: "Reserva creada exitosamente, y los mensajes han sido enviados.",
       reserva: nuevaReserva
     });
   } catch (error) {
@@ -321,6 +180,7 @@ export const registrarReserva = async (req, res) => {
     return res.status(500).json({ response: "error", message: "Error del servidor al registrar la reserva." });
   }
 };
+
 
 
 // Obtener todas las citas
@@ -405,5 +265,81 @@ export const eliminarCita = async (req, res) => {
   } catch (error) {
     console.error("Error al eliminar la cita:", error);
     return res.status(500).json({ response: "error", message: "Error del servidor al eliminar la cita." });
+  }
+};
+
+
+
+// Controlador para que el médico confirme o cancele la cita
+export const confirmarOCancelarReserva = async (req, res) => {
+  const { reservaId } = req.params;
+  const { estadoConfirmacionMedico } = req.body;
+
+  if (!['confirmado', 'cancelado'].includes(estadoConfirmacionMedico)) {
+    return res.status(400).json({ response: "error", message: "El estado de confirmación debe ser 'confirmado' o 'cancelado'." });
+  }
+
+  try {
+    // Verificar si la reserva existe
+    const reserva = await ReservaCita.findById(reservaId)
+      .populate('paciente', 'name lastname telefono')
+      .populate('medico', 'name lastname telefono')
+      .populate('especialidad_solicitada', 'name');
+
+    if (!reserva) {
+      return res.status(404).json({ response: "error", message: "Reserva no encontrada." });
+    }
+
+    // Actualizar el estado de confirmación del médico y del paciente
+    reserva.estadoConfirmacionMedico = estadoConfirmacionMedico;
+
+    if (estadoConfirmacionMedico === 'confirmado') {
+      reserva.estadoConfirmacionPaciente = 'confirmado';
+
+      // Mensaje para el médico
+      const mensajeMedico = `👋👨‍⚕️ *Gracias Dr. ${reserva.medico.name} ${reserva.medico.lastname}*,\n\n` +
+        `✅ Por confirmar tu reserva con el paciente *${reserva.paciente.name} ${reserva.paciente.lastname}* para la fecha *${format(new Date(reserva.fechaReserva), "EEEE d 'de' MMMM", { locale: es })}*.\n`;
+
+      // Mensaje para el paciente
+      const mensajePaciente = `👋👨‍⚕️ *Hola ${reserva.paciente.name} ${reserva.paciente.lastname}*,\n\n` +
+        `📅 Tu reserva con el médico *${reserva.medico.name} ${reserva.medico.lastname}* en la especialidad de *${reserva.especialidad_solicitada.name}* ha sido confirmada.\n\n` +
+        `⏰ Fecha de la cita: *${format(new Date(reserva.fechaReserva), "EEEE d 'de' MMMM", { locale: es })}*\n` +
+        `✅ Horario: *${reserva.horaInicio} - ${reserva.horaFin}*\n\n` +
+        `🔔 ¡Por favor, no faltes a tu cita!`;
+
+      // Enviar los mensajes
+      await enviarMensajeWhatsApp(reserva.paciente.telefono, mensajePaciente);
+      await enviarMensajeWhatsApp(reserva.medico.telefono, mensajeMedico);
+
+    } else if (estadoConfirmacionMedico === 'cancelado') {
+      reserva.estadoConfirmacionPaciente = 'cancelado';
+      reserva.estado_reserva = 'cancelado';
+
+      // Mensaje para el paciente
+      const mensajePaciente = `👋👨‍⚕️ *Hola ${reserva.paciente.name} ${reserva.paciente.lastname}*,\n\n` +
+        `📅 Lamentamos informarte que tu reserva con el médico *${reserva.medico.name} ${reserva.medico.lastname}* en la especialidad de *${reserva.especialidad_solicitada.name}* ha sido cancelada.\n\n` +
+        `🔔 Por favor, contacta con la administración para reprogramar tu cita.`;
+
+      // Mensaje para el médico
+      const mensajeMedico = `👋👨‍⚕️ *Hola Dr. ${reserva.medico.name} ${reserva.medico.lastname}*,\n\n` +
+        `❌ Has cancelado la reserva con el paciente *${reserva.paciente.name} ${reserva.paciente.lastname}* programada para la fecha *${format(new Date(reserva.fechaReserva), "EEEE d 'de' MMMM", { locale: es })}*.\n`;
+
+      // Enviar los mensajes
+      await enviarMensajeWhatsApp(reserva.paciente.telefono, mensajePaciente);
+      await enviarMensajeWhatsApp(reserva.medico.telefono, mensajeMedico);
+    }
+
+    // Guardar los cambios en la reserva
+    await reserva.save();
+
+    return res.status(200).json({
+      response: "success",
+      message: `La reserva ha sido ${estadoConfirmacionMedico}.`,
+      reserva
+    });
+
+  } catch (error) {
+    console.error("Error al confirmar o cancelar la reserva:", error);
+    return res.status(500).json({ response: "error", message: "Error del servidor al confirmar o cancelar la reserva." });
   }
 };

@@ -6,7 +6,8 @@ import {
   updateMedico,
   deleteMedico,
   getCalendarioMedicoPorEspecialidad,
-  buscarMedicosPorEspecialidadId
+  buscarMedicosPorEspecialidadId,
+  getDisponibilidadesOrganizadas
 
 
 } from "../controllers/medico.controller.js";
@@ -19,7 +20,9 @@ router.get("/", getMedicos);
 router.get("/:id", getMedicoById);
 router.put("/:id", updateMedico);
 router.delete("/:id", deleteMedico);
+router.get("/datos/:id", getDisponibilidadesOrganizadas);
 router.get("/calendario/:medicoId/:especialidadId", getCalendarioMedicoPorEspecialidad);
+
 
 
 router.get("/especialidad/:especialidadId", buscarMedicosPorEspecialidadId);

@@ -1,18 +1,18 @@
 import express from "express";
 import {
-  createConsulta,
-  getConsultas,
-  getConsulta,
-  updateConsulta,
-  deleteConsulta
+  registrarConsulta,
+  obtenerTodasLasConsultas,
+  obtenerConsultaPorId,
+  actualizarConsulta,
+  eliminarConsulta
 } from "../controllers/consulta.controller.js";
 import { checkAuth } from "../middlewares/auth.middlleware.js";
 const router = express.Router();
 
-router.post("/create", createConsulta);
-router.get("/", getConsultas);
-router.get("/:id", getConsulta);
-router.put("/:id", updateConsulta);
-router.delete("/:id", deleteConsulta);
+router.post("/create", registrarConsulta);
+router.get("/", obtenerTodasLasConsultas);
+router.get("/:id", obtenerConsultaPorId);
+router.put("/:consultaId", actualizarConsulta);
+router.delete("/:id", eliminarConsulta);
 
 export default router;

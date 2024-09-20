@@ -6,33 +6,32 @@ const consultaSchema = new Schema({
   citaMedica: {
     type: Schema.Types.ObjectId,
     ref: "ReservaCita",
-    required: true,
   },
   motivo_consulta: {
     type: String,
-    required: true,
+    default: "",
   },
   signos_vitales: [
     {
       Fc: {
         type: String,
-        required: true,
+        default: "",
       },
       Fr: {
         type: String,
-        required: true,
+        default: "",
       },
       Temperatura: {
         type: String,
-        required: true,
+        default: "",
       },
       peso: {
         type: String,
-        required: true,
+        default: "",
       },
       talla: {
         type: String,
-        required: true,
+        default: "",
       },
     },
   ],
@@ -41,19 +40,28 @@ const consultaSchema = new Schema({
   },
   diagnostico: {
     type: String,
-    required: true,
+    default: "",
   },
   conducta: {
     type: String,
-    required: true,
+    default: "",
   },
   fechaHora: {
     type: Date,
     default: Date.now,
-    required: true,
+
   },
   receta: {
     type: String,
+    default: "", // Asignar valor por defecto como una cadena vacía
+  },
+  horaInicio: {
+    type: String,
+    required: true,
+  },
+  horaFin: {
+    type: String,
+    default: null, // Asignar valor por defecto como una cadena vacía
   },
 });
 

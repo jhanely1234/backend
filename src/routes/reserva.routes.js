@@ -3,25 +3,44 @@ import {
   registrarReserva,
   getCitaById,
   getCitas,
-  eliminarCita
+  eliminarCita,
+  confirmarOCancelarReserva
 } from "../controllers/reserva.controller.js";
 import {
-
   getCalendarioMedicoPorEspecialidad,
   buscarMedicosPorEspecialidadId
-
-
 } from "../controllers/medico.controller.js";
+import {
+  registrarConsulta,
+  obtenerTodasLasConsultas,
+  obtenerConsultaPorId,
+  actualizarConsulta,
+  eliminarConsulta,
+  getDetallesConsultaPorPaciente,
+  enviarRecetaPorWhatsApp
+} from "../controllers/consulta.controller.js";
 import { checkAuth } from "../middlewares/auth.middlleware.js";
+
 const router = express.Router();
 
-
+// Rutas de reservas
+router.post("/create", registrarReserva);
 router.get("/", getCitas);
 router.get("/:citaId", getCitaById);
+router.delete("/:citaId", eliminarCita);
+router.put("/:reservaId/confirmacion", confirmarOCancelarReserva);
+
+// Rutas de médicos
 router.get("/medico/calendario/:medicoId/:especialidadId", getCalendarioMedicoPorEspecialidad);
 router.get("/medico/especialidad/:especialidadId", buscarMedicosPorEspecialidadId);
-router.post("/create", registrarReserva);
-router.delete("/:citaId", eliminarCita);
 
+// Rutas de consultas
+router.post("/consulta/create", registrarConsulta);
+router.get("/consulta", obtenerTodasLasConsultas);
+router.get("/consulta/:id", obtenerConsultaPorId);
+router.put("/consulta/:consultaId", actualizarConsulta);
+router.delete("/consulta/:id", eliminarConsulta);
+router.get("/consulta/:consultaId/receta/:pacienteId", getDetallesConsultaPorPaciente);
+router.post("/consulta/:consultaId/enviar-receta", enviarRecetaPorWhatsApp);
 
 export default router;
