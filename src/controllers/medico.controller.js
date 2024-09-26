@@ -719,6 +719,58 @@ export const buscarMedicosPorEspecialidadId = async (req, res) => {
   }
 };
 
+export const buscarMedicosPorEspecialidadIdcompleto = async (req, res) => {
+  const { especialidadId } = req.params;
+
+  // Validar que el ID proporcionado sea un ObjectId válido
+  if (!mongoose.Types.ObjectId.isValid(especialidadId)) {
+    return res.status(400).json({ response: "error", message: "ID de especialidad inválido." });
+  }
+
+  try {
+    // Verificar si la especialidad existe
+    const especialidad = await Especialidades.findById(especialidadId);
+
+    if (!especialidad) {
+      return res.status(404).json({ response: "error", message: "Especialidad no encontrada." });
+    }
+
+    // Buscar médicos que tengan la especialidad solicitada
+    const medicos = await User.find({ especialidades: especialidadId })
+      .populate('especialidades', 'name'); // Poblar nombres de especialidades
+
+    if (medicos.length === 0) {
+      return res.status(404).json({ response: "error", message: "No se encontraron médicos con esta especialidad." });
+    }
+
+    // Obtener disponibilidades para cada médico
+    const resultado = await Promise.all(medicos.map(async (medico) => {
+      const disponibilidades = await Disponibilidad.find({ medico: medico._id })
+        .select('dia inicio fin turno'); // Seleccionar solo los campos necesarios de disponibilidad
+
+      return {
+        id: medico._id,
+        nombre: medico.name + ' ' + medico.lastname,
+        email: medico.email,
+        telefono: medico.telefono,
+        calificacion: medico.calificacion || "No calificado",
+        especialidades: medico.especialidades.map(especialidad => especialidad.name),
+        disponibilidades: disponibilidades.map(d => ({
+          dia: d.dia,
+          inicio: d.inicio,
+          fin: d.fin,
+          turno: d.turno,
+        })),
+      };
+    }));
+
+    return res.status(200).json({ response: "success", medicos: resultado });
+  } catch (error) {
+    console.error("Error al buscar médicos por especialidad:", error);
+    return res.status(500).json({ response: "error", message: "Error del servidor al buscar médicos por especialidad." });
+  }
+};
+
 // Función para verificar si un intervalo está ocupado
 const verificarIntervaloOcupado = (intervalo, reservas) => {
   return reservas.some(reserva => {

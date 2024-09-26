@@ -48,6 +48,11 @@ const reservaCitaSchema = new mongoose.Schema(
       enum: ["confirmado", "pendiente", "cancelado"],
       default: "pendiente",
     },
+    consulta: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Consulta", // Este campo es opcional y se añadirá cuando la consulta médica sea registrada
+      required: false,
+    },
   },
   {
     timestamps: true,

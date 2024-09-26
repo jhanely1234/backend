@@ -15,6 +15,7 @@ export const registrarConsulta = async (req, res) => {
     diagnostico = "", // Opcional
     conducta = "", // Opcional
     receta = "", // Opcional
+
   } = req.body;
 
   // Validar que el ID de la cita sea un ObjectId válido
@@ -57,6 +58,7 @@ export const registrarConsulta = async (req, res) => {
       receta, // Puede estar vacío
       horaInicio, // La hora de inicio es la hora actual en la zona horaria especificada
       horaFin: "", // Inicialmente vacío
+      calificacion: 0, // Se asigna 0 por defecto al crear la consulta
     });
 
     // Guardar la consulta en la base de datos
@@ -64,6 +66,7 @@ export const registrarConsulta = async (req, res) => {
 
     // Cambiar el estado de la reserva médica a "atendido"
     reserva.estado_reserva = "atendido";
+    reserva.consulta = nuevaConsulta._id; // Actualizamos la referencia a la consulta creada
     await reserva.save();
 
     return res.status(201).json({
@@ -213,168 +216,91 @@ export const eliminarConsulta = async (req, res) => {
   }
 };
 
-/* Controlador para obtener los detalles de una consulta de un paciente específico
-export const getDetallesConsultaPorPaciente = async (req, res) => {
-  const { pacienteId, consultaId } = req.params;
 
-  // Validar que los IDs proporcionados sean ObjectIds válidos
-  if (!mongoose.Types.ObjectId.isValid(pacienteId) || !mongoose.Types.ObjectId.isValid(consultaId)) {
-    return res.status(400).json({
-      response: "error",
-      message: "ID de paciente o consulta inválido.",
-    });
-  }
-
+// Endpoint para calificar a un médico al finalizar la consulta
+export const calificarMedico = async (req, res) => {
   try {
-    // Buscar la reserva asociada al paciente
-    const reserva = await ReservaCita.findOne({
-      paciente: pacienteId,
-    })
-      .populate("paciente", "name lastname email")
-      .populate("medico", "name lastname email")
-      .populate("especialidad_solicitada", "name");
+    const { consultaId, calificacion } = req.body;
 
-    if (!reserva) {
-      return res.status(404).json({
-        response: "error",
-        message: "Reserva no encontrada para el paciente especificado.",
-      });
-    }
-
-    // Buscar la consulta asociada a la cita médica (reserva)
+    // 1. Encontrar la consulta médica a partir del ID de la consulta
     const consulta = await Consulta.findById(consultaId).populate({
-      path: "citaMedica",
-      match: { paciente: pacienteId },
-      select: "receta"
+      path: 'citaMedica',
+      populate: { path: 'medico', model: 'User' },
     });
 
     if (!consulta) {
-      return res.status(404).json({
-        response: "error",
-        message: "Consulta no encontrada para el paciente especificado.",
-      });
+      return res.status(404).json({ message: 'Consulta no encontrada' });
     }
 
-    // Devolver los detalles completos de la consulta, incluyendo los campos solicitados
+    console.log('Consulta encontrada:', consulta);
+
+    if (consulta.calificacion && consulta.calificacion > 0) {
+      return res.status(400).json({ message: 'Esta consulta ya ha sido calificada' });
+    }
+
+    // 2. Verificar que la calificación esté en el rango permitido
+    if (calificacion < 1 || calificacion > 5) {
+      return res.status(400).json({ message: 'La calificación debe estar entre 1 y 5' });
+    }
+
+    // 3. Guardar la calificación en la consulta
+    consulta.calificacion = calificacion;
+    await consulta.save();
+
+    console.log('Calificación guardada en la consulta:', calificacion);
+
+    // 4. Obtener el ID del médico desde la cita médica
+    const medicoId = consulta.citaMedica.medico._id;
+    console.log('ID del médico:', medicoId);
+
+    // 5. Buscar todas las consultas que tengan relación con las reservas de citas de este médico
+    const reservasDelMedico = await ReservaCita.find({ medico: medicoId });
+    const reservasIds = reservasDelMedico.map(reserva => reserva._id);
+
+    console.log(`Reservas del médico con ID ${medicoId}:`, reservasIds);
+
+    // 6. Buscar todas las consultas que correspondan a las reservas del médico
+    const consultasMedico = await Consulta.find({
+      citaMedica: { $in: reservasIds },
+      calificacion: { $exists: true },
+    });
+
+    console.log(`Consultas del médico con ID ${medicoId}:`, consultasMedico);
+
+    // 7. Filtrar las consultas con calificaciones válidas
+    const calificacionesValidas = consultasMedico
+      .filter(consulta => consulta.calificacion !== null && consulta.calificacion > 0)
+      .map(consulta => consulta.calificacion);
+
+    console.log('Calificaciones válidas:', calificacionesValidas);
+
+    // 8. Calcular la suma de las calificaciones válidas
+    const sumaCalificaciones = calificacionesValidas.reduce((acc, calificacion) => acc + calificacion, 0);
+    console.log('Suma de calificaciones válidas:', sumaCalificaciones);
+
+    // 9. Calcular el promedio de calificaciones y redondearlo a un decimal
+    const promedioCalificacion =
+      calificacionesValidas.length > 0 ? (sumaCalificaciones / calificacionesValidas.length).toFixed(1) : 0;
+
+
+    // 10. Actualizar la calificación promedio del médico
+    const medico = await User.findById(medicoId);
+    if (!medico) {
+      return res.status(404).json({ message: 'Médico no encontrado' });
+    }
+
+    medico.calificacion = promedioCalificacion;
+    await medico.save();
+
+    console.log('Calificación promedio guardada en el médico:', medico.calificacion);
+
+    // 11. Responder con éxito
     return res.status(200).json({
-      response: "success",
-      consulta: {
-        paciente: reserva.paciente, // Nombre del paciente
-        medico: reserva.medico, // Nombre del médico
-        especialidad: reserva.especialidad_solicitada.name, // Especialidad médica
-        fechaConsulta: reserva.fechaReserva, // Fecha de la consulta
-        horaInicio: reserva.horaInicio, // Hora de inicio de la consulta
-        motivo_consulta: consulta.motivo_consulta,
-        signos_vitales: consulta.signos_vitales,
-        examen_fisico: consulta.examen_fisico || "No realizado",
-        diagnostico: consulta.diagnostico,
-        conducta: consulta.conducta,
-        receta: consulta.receta || "No prescrita",
-      },
+      message: 'Calificación registrada y promedio actualizado',
+      calificacionPromedio: promedioCalificacion,
     });
   } catch (error) {
-    console.error("Error al obtener los detalles de la consulta:", error);
-    return res.status(500).json({
-      response: "error",
-      message: "Error del servidor al obtener los detalles de la consulta.",
-    });
+    console.error('Error al calificar al médico:', error);
+    return res.status(500).json({ message: 'Error al calificar al médico' });
   }
 };
-
-// Controlador para enviar la receta al WhatsApp del paciente
-export const enviarRecetaPorWhatsApp = async (req, res) => {
-  const { consultaId } = req.params;
-
-  // Validar que el ID de la consulta sea un ObjectId válido
-  if (!mongoose.Types.ObjectId.isValid(consultaId)) {
-    return res.status(400).json({
-      response: "error",
-      message: "ID de consulta inválido.",
-    });
-  }
-
-  try {
-    // Buscar la consulta y la reserva médica asociada
-    const consulta = await Consulta.findById(consultaId).populate("citaMedica");
-
-    if (!consulta) {
-      return res.status(404).json({
-        response: "error",
-        message: "Consulta no encontrada.",
-      });
-    }
-
-    // Obtener los detalles del paciente y el médico a través de la reserva
-    const reserva = await ReservaCita.findById(consulta.citaMedica._id)
-      .populate("paciente", "name lastname telefono")
-      .populate("medico", "name lastname");
-
-    if (!reserva) {
-      return res.status(404).json({
-        response: "error",
-        message: "Reserva médica no encontrada.",
-      });
-    }
-
-    const paciente = reserva.paciente;
-    const medico = reserva.medico;
-
-    // Verificar el número de teléfono del paciente
-    console.log("Detalles del paciente:", paciente);
-
-    // Verificar si el paciente tiene un número de celular registrado
-    if (!paciente.telefono) {
-      return res.status(400).json({
-        response: "error",
-        message: "El paciente no tiene un número de celular registrado.",
-      });
-    }
-
-    // Crear el mensaje que será enviado por WhatsApp
-    const message = `
-Estimado/a ${paciente.name} ${paciente.lastname}, su receta es la siguiente:
-
-Motivo de Consulta: ${consulta.motivo_consulta || "No especificado"}
-Signos Vitales:
-- Fc: ${consulta.signos_vitales[0]?.Fc || "N/A"}
-- Fr: ${consulta.signos_vitales[0]?.Fr || "N/A"}
-- Temperatura: ${consulta.signos_vitales[0]?.Temperatura || "N/A"}
-- Peso: ${consulta.signos_vitales[0]?.peso || "N/A"}
-- Talla: ${consulta.signos_vitales[0]?.talla || "N/A"}
-
-Examen Físico: ${consulta.examen_fisico || "No especificado"}
-Diagnóstico: ${consulta.diagnostico || "No especificado"}
-Conducta: ${consulta.conducta || "No especificado"}
-Receta: ${consulta.receta || "No se ha prescrito receta"}
-
-Atendido por: Dr./Dra. ${medico.name} ${medico.lastname}
-Fecha de Consulta: ${consulta.fechaHora.toLocaleDateString()}
-    `;
-
-    // Llamar a la API externa para enviar el mensaje por WhatsApp
-    const apiResponse = await axios.post(process.env.WHATSAPP_API_URL, {
-      message: message,
-      phone: paciente.telefono, // Usamos el número de celular del paciente
-    });
-
-    // Verificar si la API respondió con éxito
-    if (apiResponse.status === 200 || apiResponse.status === 201) {
-      return res.status(200).json({
-        response: "success",
-        message: "Receta enviada al WhatsApp del paciente exitosamente.",
-      });
-    } else {
-      return res.status(apiResponse.status).json({
-        response: "error",
-        message: "Error al enviar la receta al WhatsApp del paciente.",
-      });
-    }
-  } catch (error) {
-    console.error("Error al enviar la receta por WhatsApp:", error);
-    return res.status(500).json({
-      response: "error",
-      message: "Error del servidor al enviar la receta por WhatsApp.",
-    });
-  }
-};
-*/

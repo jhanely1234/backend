@@ -16,6 +16,7 @@ import {
   obtenerConsultaPorId,
   actualizarConsulta,
   eliminarConsulta,
+  calificarMedico
 } from "../controllers/consulta.controller.js";
 import { checkAuth } from "../middlewares/auth.middlleware.js";
 
@@ -33,6 +34,7 @@ router.get("/medico/calendario/:medicoId/:especialidadId", getCalendarioMedicoPo
 router.get("/medico/especialidad/:especialidadId", buscarMedicosPorEspecialidadId);
 
 // Rutas de consultas
+router.post("/consulta/calificar", calificarMedico);
 router.post("/consulta/create", registrarConsulta);
 router.get("/consulta", obtenerTodasLasConsultas);
 router.get("/consulta/:id", obtenerConsultaPorId);

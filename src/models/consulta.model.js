@@ -63,6 +63,12 @@ const consultaSchema = new Schema({
     type: String,
     default: null, // Asignar valor por defecto como una cadena vacía
   },
+  calificacion: {
+    type: Number,
+    min: 0,
+    max: 5,
+    required: false,
+  },
 });
 
 export const Consulta = mongoose.model("Consulta", consultaSchema);

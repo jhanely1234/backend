@@ -7,7 +7,8 @@ import {
   deleteMedico,
   getCalendarioMedicoPorEspecialidad,
   buscarMedicosPorEspecialidadId,
-  getDisponibilidadesOrganizadas
+  getDisponibilidadesOrganizadas,
+  buscarMedicosPorEspecialidadIdcompleto
 
 
 } from "../controllers/medico.controller.js";
@@ -26,6 +27,8 @@ router.get("/calendario/:medicoId/:especialidadId", getCalendarioMedicoPorEspeci
 
 
 router.get("/especialidad/:especialidadId", buscarMedicosPorEspecialidadId);
+
+router.get("/especialidadcompleto/:especialidadId", buscarMedicosPorEspecialidadIdcompleto);
 
 
 export default router;

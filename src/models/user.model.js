@@ -54,6 +54,11 @@ const userSchema = new mongoose.Schema(
     nombre_tutor: {
       type: String,
     },
+    calificacion: {
+      type: Number,
+      min: 0,
+      max: 5, // Por ejemplo, una escala de 0 a 5
+    },
     verificationCode: { type: String },
     verificationCodeExpires: { type: Date },
     resetPasswordToken: { type: String },

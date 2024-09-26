@@ -4,12 +4,15 @@ import {
   obtenerTodasLasConsultas,
   obtenerConsultaPorId,
   actualizarConsulta,
-  eliminarConsulta
+  eliminarConsulta,
+  calificarMedico
 } from "../controllers/consulta.controller.js";
 import { checkAuth } from "../middlewares/auth.middlleware.js";
 const router = express.Router();
 
 router.post("/create", registrarConsulta);
+
+router.post("/calificar", calificarMedico);
 router.get("/", obtenerTodasLasConsultas);
 router.get("/:id", obtenerConsultaPorId);
 router.put("/:consultaId", actualizarConsulta);

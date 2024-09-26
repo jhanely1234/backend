@@ -189,7 +189,11 @@ export const getCitas = async (req, res) => {
     const citas = await ReservaCita.find()
       .populate('paciente', 'name lastname')
       .populate('medico', 'name lastname')
-      .populate('especialidad_solicitada', 'name');
+      .populate('especialidad_solicitada', 'name')
+      .populate({
+        path: 'consulta', // Populate la consulta relacionada
+        select: '_id calificacion', // Solo seleccionamos el ID y la calificación
+      });
 
     if (citas.length === 0) {
       return res.status(404).json({ response: "error", message: "No se encontraron citas." });
@@ -216,7 +220,11 @@ export const getCitaById = async (req, res) => {
     const cita = await ReservaCita.findById(citaId)
       .populate('paciente', 'name lastname')
       .populate('medico', 'name lastname')
-      .populate('especialidad_solicitada', 'name');
+      .populate('especialidad_solicitada', 'name')
+      .populate({
+        path: 'consulta', // Populate la consulta relacionada
+        select: '_id calificacion', // Solo seleccionamos el ID y la calificación
+      });
 
     if (!cita) {
       return res.status(404).json({ response: "error", message: "Cita no encontrada." });
