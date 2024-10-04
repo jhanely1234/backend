@@ -20,6 +20,7 @@ export const checkAuth = async (req, res, next) => {
         .populate("especialidades", "name")
         .populate("roles", "name");
 
+
       return next();
     } catch (error) {
       return res.status(401).json({

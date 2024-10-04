@@ -19,7 +19,7 @@ const router = express.Router();
 router.post("/register", registerMedico);
 router.get("/", getMedicos);
 router.get("/:id", getMedicoById);
-router.put("/:id", updateMedico);
+router.put("/:id", checkAuth, updateMedico);
 router.delete("/:id", deleteMedico);
 router.get("/datos/:id", getDisponibilidadesOrganizadas);
 router.get("/calendario/:medicoId/:especialidadId", getCalendarioMedicoPorEspecialidad);

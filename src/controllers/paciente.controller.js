@@ -240,32 +240,13 @@ export const deletePaciente = async (req, res) => {
 
 export const updatePaciente = async (req, res) => {
   const { id } = req.params;
-  const {
-    name,
-    lastname,
-    email,
-    password,
-    ci,
-    genero,
-    fechaNacimiento,
-    telefono,
-    telefono_tutor,
-    nombre_tutor
-  } = req.body;
+  const { telefono, password, email } = req.body;
 
-  // Validar el formato del email usando validateEmail
-  if (email && !validateEmail(email)) {
+  // Validar que se haya enviado al menos uno de los campos (telefono o password)
+  if (!telefono && !password && !email) {
     return res.status(400).json({
       response: "error",
-      message: "El formato del email no es válido"
-    });
-  }
-
-  // Validar otros campos obligatorios y lógica de negocio
-  if (!name || !lastname) {
-    return res.status(400).json({
-      response: "error",
-      message: "Nombre y apellido son obligatorios"
+      message: "Debe proporcionar al menos un campo: email, teléfono o contraseña."
     });
   }
 
@@ -279,75 +260,36 @@ export const updatePaciente = async (req, res) => {
       });
     }
 
-    // Verificar si el nuevo email o CI ya existen en otro usuario
-    if (email && email !== user.email) {
-      const emailExists = await User.findOne({ email });
-      if (emailExists) {
-        return res.status(400).json({
-          response: "error",
-          message: "El email ya se encuentra registrado en la base de datos."
-        });
-      }
+    // Si se proporciona un nuevo teléfono, actualizarlo
+    if (telefono) {
+      user.telefono = telefono;
+    }
+    // Si se proporciona un nuevo email, actualizarlo
+    if (email) {
+      user.email = email;
     }
 
-    if (ci && ci !== user.ci) {
-      const ciExists = await User.findOne({ ci });
-      if (ciExists) {
-        return res.status(400).json({
-          response: "error",
-          message: "El CI ya se encuentra registrado en la base de datos."
-        });
-      }
+    // Si se proporciona una nueva contraseña, actualizarla (Mongoose se encargará de la encriptación)
+    if (password) {
+      user.password = password; // La encriptación ocurre automáticamente en el pre-save hook
     }
 
-    // Si se proporciona una nueva fecha de nacimiento, recalcular la edad
-    if (fechaNacimiento) {
-      const hoy = new Date();
-      const fechaNac = new Date(fechaNacimiento);
-      let edad = hoy.getFullYear() - fechaNac.getFullYear();
-      const mes = hoy.getMonth() - fechaNac.getMonth();
-      if (mes < 0 || (mes === 0 && hoy.getDate() < fechaNac.getDate())) {
-        edad--;
-      }
-
-      // Verificar si es menor de edad y se requiere información del tutor
-      if (edad < 18 && (!telefono_tutor || !nombre_tutor)) {
-        return res.status(400).json({
-          response: "error",
-          message:
-            "Por favor, proporcione el nombre y teléfono de su tutor o apoderado"
-        });
-      }
-
-      user.edad = edad;
-      user.fechaNacimiento = fechaNacimiento;
-    }
-
-    // Actualizar los campos del usuario
-    user.name = name || user.name;
-    user.lastname = lastname || user.lastname;
-    user.email = email || user.email;
-    if (password) user.password = password;
-    user.ci = ci || user.ci;
-    user.genero = genero || user.genero;
-    user.telefono = telefono || user.telefono;
-    user.telefono_tutor = telefono_tutor || user.telefono_tutor;
-    user.nombre_tutor = nombre_tutor || user.nombre_tutor;
-
+    // Guardar los cambios
     const updatedUser = await user.save();
 
     return res.status(200).json({
       response: "success",
-      user: updatedUser
+      user: {
+        id: updatedUser._id,
+        telefono: updatedUser.telefono,
+        // No devolver la contraseña en la respuesta por seguridad
+      }
     });
   } catch (error) {
     console.log(error);
-    let message = "Error del servidor";
-    if (error.code === 11000) {
-      // Identificar el campo duplicado basado en el error
-      const duplicateKey = Object.keys(error.keyValue)[0];
-      message = `El ${duplicateKey} ya se encuentra registrado en la base de datos.`;
-    }
-    return res.status(500).json({ response: "error", message });
+    return res.status(500).json({
+      response: "error",
+      message: "Error del servidor al actualizar el usuario"
+    });
   }
 };

@@ -298,8 +298,9 @@ export const getReingresoRate = async (req, res) => {
 
 export const getConsultationReport = async (req, res) => {
   try {
-    const { startDate, endDate, estado } = req.query;
+    const { startDate, endDate, estado, medicoId, pacienteId, especialidadId } = req.query;
 
+    // Verificar fechas requeridas
     if (!startDate || !endDate) {
       return res.status(400).json({ response: "error", message: 'Se requieren startDate y endDate' });
     }
@@ -309,12 +310,23 @@ export const getConsultationReport = async (req, res) => {
 
     if (start > end) {
       return res.status(400).json({ response: "error", message: 'El endDate no puede ser menor que el startDate.' });
-
     }
 
+    // Filtro básico por fechas
     const consultaFilter = { fechaHora: { $gte: start, $lte: end } };
+
+    // Filtros adicionales opcionales
     if (estado) {
       consultaFilter['citaMedica.estado_reserva'] = estado;
+    }
+    if (medicoId) {
+      consultaFilter['citaMedica.medico'] = medicoId;
+    }
+    if (pacienteId) {
+      consultaFilter['citaMedica.paciente'] = pacienteId;
+    }
+    if (especialidadId) {
+      consultaFilter['citaMedica.especialidad_solicitada'] = especialidadId;
     }
 
     const consultas = await Consulta.find(consultaFilter)
@@ -366,10 +378,12 @@ export const getConsultationReport = async (req, res) => {
 };
 
 
+
 export const getReservationReport = async (req, res) => {
   try {
-    const { startDate, endDate, estado } = req.query;
+    const { startDate, endDate, estado, medicoId, pacienteId, especialidadId } = req.query;
 
+    // Verificar fechas requeridas
     if (!startDate || !endDate) {
       return res.status(400).json({ response: "error", message: 'Se requieren startDate y endDate' });
     }
@@ -383,8 +397,18 @@ export const getReservationReport = async (req, res) => {
 
     const reservaFilter = { fechaReserva: { $gte: start, $lte: end } };
 
+    // Filtros adicionales opcionales
     if (estado) {
       reservaFilter['estado_reserva'] = estado;
+    }
+    if (medicoId) {
+      reservaFilter['medico'] = medicoId;
+    }
+    if (pacienteId) {
+      reservaFilter['paciente'] = pacienteId;
+    }
+    if (especialidadId) {
+      reservaFilter['especialidad_solicitada'] = especialidadId;
     }
 
     const reservas = await ReservaCita.find(reservaFilter)
@@ -436,10 +460,12 @@ export const getReservationReport = async (req, res) => {
 };
 
 
+
 export const getPatientReport = async (req, res) => {
   try {
-    const { patientId, startDate, endDate, estado } = req.query;
+    const { patientId, startDate, endDate, estado, especialidadId } = req.query;
 
+    // Verificar fechas requeridas y patientId
     if (!patientId || !startDate || !endDate) {
       return res.status(400).json({ response: "error", message: 'se requieren patientId, startDate y endDate' });
     }
@@ -463,6 +489,9 @@ export const getPatientReport = async (req, res) => {
 
     if (estado) {
       reservaFilter['estado_reserva'] = estado;
+    }
+    if (especialidadId) {
+      reservaFilter['especialidad_solicitada'] = especialidadId;
     }
 
     const reservas = await ReservaCita.find(reservaFilter)
@@ -529,7 +558,7 @@ export const getPatientReport = async (req, res) => {
 
 export const getDoctorReport = async (req, res) => {
   try {
-    const { doctorId, startDate, endDate, estado } = req.query;
+    const { doctorId, startDate, endDate, estado, especialidadId } = req.query;
 
     if (!doctorId || !startDate || !endDate) {
       return res.status(400).json({ response: "error", message: 'se requieren doctorId, startDate y endDate' });
@@ -557,6 +586,9 @@ export const getDoctorReport = async (req, res) => {
 
     if (estado) {
       reservaFilter['estado_reserva'] = estado;
+    }
+    if (especialidadId) {
+      reservaFilter['especialidad_solicitada'] = especialidadId;
     }
 
     const reservas = await ReservaCita.find(reservaFilter)
